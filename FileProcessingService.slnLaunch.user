@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "New Profile",
+    "Projects": [
+      {
+        "Path": "src\\FileProcessingService.Api\\FileProcessingService.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "src\\FileProcessingService.Worker\\FileProcessingService.Worker.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

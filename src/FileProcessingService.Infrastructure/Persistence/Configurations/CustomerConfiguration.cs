@@ -12,6 +12,9 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
 
         builder.HasKey(c => c.Id);
 
+        builder.Property(c => c.ImportId)
+            .IsRequired();
+
         builder.Property(c => c.FirstName)
             .HasMaxLength(100)
             .IsRequired();

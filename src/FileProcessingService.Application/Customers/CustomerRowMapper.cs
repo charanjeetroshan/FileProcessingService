@@ -8,6 +8,7 @@ public static class CustomerRowMapper
 {
     public static bool TryMap(
         CustomerImportRow row,
+        Guid importId,
         [NotNullWhen(true)] out Customer? customer,
         [NotNullWhen(false)] out string? errorMessage)
     {
@@ -21,6 +22,7 @@ public static class CustomerRowMapper
         customer = new Customer
         {
             Id = Guid.NewGuid(),
+            ImportId = importId,
             FirstName = row.FirstName?.Trim() ?? string.Empty,
             LastName = row.LastName?.Trim() ?? string.Empty,
             Email = row.Email?.Trim() ?? string.Empty,

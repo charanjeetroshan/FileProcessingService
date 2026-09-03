@@ -68,7 +68,7 @@ internal class ImportJobProcessor(
                     continue;
                 }
 
-                if (!CustomerRowMapper.TryMap(row, out Customer? customer, out string? mappingError))
+                if (!CustomerRowMapper.TryMap(row, job.Id, out Customer? customer, out string? mappingError))
                 {
                     errors.Add(new ImportError
                     {

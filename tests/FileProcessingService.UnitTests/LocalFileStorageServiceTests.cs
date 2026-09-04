@@ -14,7 +14,7 @@ public class LocalFileStorageServiceTests
     public void Setup()
     {
         tempDirectory = Path.Combine(Path.GetTempPath(), $"local-file-storage-tests-{Guid.NewGuid()}");
-        var options = Options.Create(new FileStorageOptions { UploadDirectory = tempDirectory });
+        var options = Options.Create(new FileStorageOptions { UploadDirectoryPath = tempDirectory });
         service = new LocalFileStorageService(options, NullLogger<LocalFileStorageService>.Instance);
     }
 

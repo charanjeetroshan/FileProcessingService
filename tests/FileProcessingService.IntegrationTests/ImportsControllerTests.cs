@@ -1,12 +1,14 @@
+using FileProcessingService.Application.Contracts;
+using FileProcessingService.Application.Validation;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
-using FileProcessingService.Application.Contracts;
-using FileProcessingService.Application.Validation;
 
 namespace FileProcessingService.IntegrationTests;
 
+[TestFixture]
+[Explicit("Occasionally long running tests")]
 public class ImportsControllerTests
 {
     private CustomWebApplicationFactory factory = null!;

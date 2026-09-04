@@ -15,20 +15,23 @@ namespace FileProcessingService.IntegrationTests;
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection connection = new("DataSource=:memory:");
-    public string UploadDirectory { get; } = Path.Combine(Path.GetTempPath(), $"file-processing-tests-{Guid.NewGuid()}");
+    public string UploadDirectoryPath { get; } = Path.Combine(Path.GetTempPath(), $"file-processing-tests-{Guid.NewGuid()}");
+    public string ExportDirectoryPath { get; } = Path.Combine(Path.GetTempPath(), $"file-processing-tests-exports-{Guid.NewGuid()}");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         connection.Open();
 
-        Directory.CreateDirectory(UploadDirectory);
+        Directory.CreateDirectory(UploadDirectoryPath);
+        Directory.CreateDirectory(ExportDirectoryPath);
 
         builder.ConfigureAppConfiguration((_, configBuilder) =>
         {
             configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:FileProcessingDatabase"] = "DataSource=file-processing-tests;Mode=Memory;Cache=Shared",
-                [$"{FileStorageOptions.SectionName}:{nameof(FileStorageOptions.UploadDirectory)}"] = UploadDirectory,
+                [$"{FileStorageOptions.SectionName}:{nameof(FileStorageOptions.UploadDirectoryPath)}"] = UploadDirectoryPath,
+                [$"{FileStorageOptions.SectionName}:{nameof(FileStorageOptions.ExportDirectoryPath)}"] = ExportDirectoryPath,
                 [$"{CsvOptions.SectionName}:{nameof(CsvOptions.Separator)}"] = ","
             });
         });
@@ -56,9 +59,14 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
         {
             connection.Dispose();
 
-            if (Directory.Exists(UploadDirectory))
+            if (Directory.Exists(UploadDirectoryPath))
             {
-                Directory.Delete(UploadDirectory, recursive: true);
+                Directory.Delete(UploadDirectoryPath, recursive: true);
+            }
+
+            if (Directory.Exists(ExportDirectoryPath))
+            {
+                Directory.Delete(ExportDirectoryPath, recursive: true);
             }
         }
     }

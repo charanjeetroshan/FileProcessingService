@@ -46,7 +46,7 @@ public class ImportJobProcessorTests
 
     private ImportJobProcessor CreateProcessor()
     {
-        var options = Options.Create(new FileStorageOptions { UploadDirectory = uploadDirectory });
+        var options = Options.Create(new FileStorageOptions { UploadDirectoryPath = uploadDirectory });
         return new ImportJobProcessor(options, csvReaderMock.Object, validatorMock.Object, dbContext, NullLogger<ImportJobProcessor>.Instance);
     }
 

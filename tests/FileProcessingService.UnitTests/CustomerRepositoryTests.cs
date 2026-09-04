@@ -2,7 +2,6 @@ using FileProcessingService.Domain.Entities;
 using FileProcessingService.Infrastructure.Customers;
 using FileProcessingService.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FileProcessingService.UnitTests;
 
@@ -16,7 +15,7 @@ public class CustomerRepositoryTests
     public void Setup()
     {
         (dbContext, connection) = SqliteDbContextFactory.Create();
-        repository = new CustomerRepository(dbContext, NullLogger<CustomerRepository>.Instance);
+        repository = new CustomerRepository(dbContext);
     }
 
     [TearDown]

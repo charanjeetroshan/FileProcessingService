@@ -18,12 +18,15 @@ public class CustomerRowMapperTests
             Country = " USA "
         };
 
-        var mapped = CustomerRowMapper.TryMap(row, out var customer, out var errorMessage);
+        Guid randomImportId = Guid.NewGuid();
+
+        var mapped = CustomerRowMapper.TryMap(row, randomImportId, out var customer, out var errorMessage);
 
         Assert.That(mapped, Is.True);
         Assert.That(errorMessage, Is.Null);
         Assert.That(customer, Is.Not.Null);
-        Assert.That(customer!.FirstName, Is.EqualTo("Jane"));
+        Assert.That(customer.ImportId, Is.EqualTo(randomImportId));
+        Assert.That(customer.FirstName, Is.EqualTo("Jane"));
         Assert.That(customer.LastName, Is.EqualTo("Doe"));
         Assert.That(customer.Email, Is.EqualTo("jane.doe@example.com"));
         Assert.That(customer.Country, Is.EqualTo("USA"));
@@ -43,7 +46,7 @@ public class CustomerRowMapperTests
             Country = "USA"
         };
 
-        var mapped = CustomerRowMapper.TryMap(row, out var customer, out var errorMessage);
+        var mapped = CustomerRowMapper.TryMap(row, Guid.NewGuid(), out var customer, out var errorMessage);
 
         Assert.That(mapped, Is.False);
         Assert.That(customer, Is.Null);

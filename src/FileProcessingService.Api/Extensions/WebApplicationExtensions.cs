@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Hosting.Server;
+﻿using FileProcessingService.Api.Middlewares;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Serilog;
 
@@ -8,6 +9,22 @@ public static class WebApplicationExtensions
 {
     public static WebApplication UseWebApi(this WebApplication app)
     {
+        if (app.Environment.IsDevelopment())
+        {
+            app.UseSwagger();
+            app.UseSwaggerUI();
+        }
+
+        app.UseHttpsRedirection();
+
+        app.UseAuthorization();
+
+        app.MapControllers();
+
+        app.UseMiddleware<RequestLoggingMiddleware>();
+
+        app.UseExceptionHandler(_ => { });
+
         app.Lifetime.ApplicationStarted.Register(() => LogHostInformation(app));
 
         return app;

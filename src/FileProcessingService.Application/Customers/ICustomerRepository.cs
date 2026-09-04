@@ -7,4 +7,6 @@ public interface ICustomerRepository
     Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
 
     Task AddAsync(Customer customer, CancellationToken cancellationToken = default);
+
+    IAsyncEnumerable<Customer> GetByImportIdAsync(Guid importId, CancellationToken cancellationToken = default);
 }

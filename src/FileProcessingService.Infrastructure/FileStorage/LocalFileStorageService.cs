@@ -6,7 +6,7 @@ namespace FileProcessingService.Infrastructure.FileStorage;
 
 public class LocalFileStorageService(IOptions<FileStorageOptions> options, ILogger<LocalFileStorageService> logger) : IFileStorageService
 {
-    private readonly string root = EnsureDirectoryExists(options.Value.UploadDirectory);
+    private readonly string root = EnsureDirectoryExists(options.Value.UploadDirectoryPath);
 
     public async Task<string> SaveAsync(string fileName, Stream content, CancellationToken cancellationToken = default)
     {

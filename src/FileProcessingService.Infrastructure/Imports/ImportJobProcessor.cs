@@ -32,7 +32,7 @@ internal class ImportJobProcessor(
         List<Customer> customers = [];
         List<ImportError> errors = [];
 
-        var filePath = Path.Combine(storageOptions.Value.UploadDirectory, job.StoredFileName);
+        var filePath = Path.Combine(storageOptions.Value.UploadDirectoryPath, job.StoredFileName);
 
         try
         {

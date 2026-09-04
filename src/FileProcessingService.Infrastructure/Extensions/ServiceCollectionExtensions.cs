@@ -1,9 +1,11 @@
 using FileProcessingService.Application.Abstractions;
 using FileProcessingService.Application.Customers;
+using FileProcessingService.Application.Exports;
 using FileProcessingService.Application.Imports;
 using FileProcessingService.Application.Validation.Validators;
 using FileProcessingService.Infrastructure.Csv;
 using FileProcessingService.Infrastructure.Customers;
+using FileProcessingService.Infrastructure.Exports;
 using FileProcessingService.Infrastructure.FileStorage;
 using FileProcessingService.Infrastructure.Imports;
 using FileProcessingService.Infrastructure.Persistence;
@@ -34,6 +36,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IImportErrorRepository, ImportErrorRepository>();
         services.AddScoped<IImportJobProcessor, ImportJobProcessor>();
         services.AddScoped<IValidator<CustomerImportRow>, CustomerImportRowValidator>();
+        services.AddScoped<IExporter, NdJsonExporter>();
+        services.AddScoped<IExporter, CsvExporter>();
 
         return services;
     }
@@ -42,16 +46,12 @@ public static class ServiceCollectionExtensions
     {
         services.AddOptions<FileStorageOptions>()
             .BindConfiguration(FileStorageOptions.SectionName)
-            .Validate(o =>
-                !string.IsNullOrWhiteSpace(o.UploadDirectory),
-                $"{nameof(FileStorageOptions.UploadDirectory)} is not configured. Check appsettings.json.")
+            .ValidateDataAnnotations()
             .ValidateOnStart();
 
         services.AddOptions<CsvOptions>()
             .BindConfiguration(CsvOptions.SectionName)
-            .Validate(o =>
-                !string.IsNullOrWhiteSpace(o.Separator),
-                $"{nameof(CsvOptions.Separator)} is not configured. Check appsettings.json.")
+            .ValidateDataAnnotations()
             .ValidateOnStart();
     }
 }

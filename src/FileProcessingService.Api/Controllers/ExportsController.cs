@@ -35,7 +35,7 @@ public class ExportsController(
 
         ExportResult exportResult = await exporter.ExportCustomers(customers, exportDirectory, cancellationToken);
 
-        logger.LogDebug("Export created for Import Id: {ImportId} at {FilePath}.", importId, exportResult.ExportedFilePath);
+        logger.LogDebug("Export created for Import Id: {ImportId} at {FilePath}. Row count: {RowCount}.", importId, exportResult.ExportedFilePath, exportResult.ExportedDataSetCount);
 
         return PhysicalFile(exportResult.ExportedFilePath, GetContentType(format), Path.GetFileName(exportResult.ExportedFilePath));
     }

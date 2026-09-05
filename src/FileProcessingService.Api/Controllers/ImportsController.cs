@@ -3,7 +3,9 @@ using FileProcessingService.Application.Contracts;
 using FileProcessingService.Application.Imports;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
+using FileProcessingService.Infrastructure.FileStorage;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace FileProcessingService.Api.Controllers;
 
@@ -13,6 +15,7 @@ public class ImportsController(
     IFileStorageService fileStorageService,
     IFileHasher fileHasher,
     IImportJobRepository importJobRepository,
+    IOptions<FileStorageOptions> fileStorageOptions,
     IImportErrorRepository importErrorRepository,
     ILogger<ImportsController> logger) : ControllerBase
 {
@@ -41,7 +44,9 @@ public class ImportsController(
         }
 
         await using var stream = file.OpenReadStream();
-        var storedFileName = await fileStorageService.SaveAsync(file.FileName, stream, cancellationToken);
+        var uploadDirectory = fileStorageOptions.Value.UploadDirectoryPath;
+        logger.LogDebug("Root upload directory: {UploadDirectory}", uploadDirectory);
+        var storedFileName = await fileStorageService.SaveAsync(file.FileName, uploadDirectory, stream, cancellationToken);
 
         var job = new ImportJob
         {

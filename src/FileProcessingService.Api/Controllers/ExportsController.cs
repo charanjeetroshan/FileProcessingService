@@ -1,8 +1,10 @@
 using FileProcessingService.Application.Customers;
 using FileProcessingService.Application.Exports;
+using FileProcessingService.Domain.Exceptions;
 using FileProcessingService.Infrastructure.FileStorage;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using System.Net;
 
 namespace FileProcessingService.Api.Controllers;
 
@@ -28,14 +30,17 @@ public class ExportsController(
             return NotFound();
         }
 
-        var exporter = exporters.SingleOrDefault(e => e.Format == format) ?? throw new InvalidOperationException($"No exporter is registered for format '{format}'.");
+        var exporter = exporters.SingleOrDefault(e => e.Format == format)
+            ?? throw new FileProcessingException(HttpStatusCode.BadRequest, $"No exporter is registered for format '{format}'.");
+
         var exportDirectory = options.Value.ExportDirectoryPath;
 
         logger.LogDebug("Exporting customers for Import Id: {ImportId}...", importId);
 
         ExportResult exportResult = await exporter.ExportCustomers(customers, exportDirectory, cancellationToken);
 
-        logger.LogDebug("Export created for Import Id: {ImportId} at {FilePath}. Row count: {RowCount}.", importId, exportResult.ExportedFilePath, exportResult.ExportedDataSetCount);
+        logger.LogDebug("Export created for Import Id: {ImportId} at {FilePath}." + Environment.NewLine +
+            "Row count: {RowCount}.", importId, exportResult.ExportedFilePath, exportResult.ExportedDataSetCount);
 
         return PhysicalFile(exportResult.ExportedFilePath, GetContentType(format), Path.GetFileName(exportResult.ExportedFilePath));
     }

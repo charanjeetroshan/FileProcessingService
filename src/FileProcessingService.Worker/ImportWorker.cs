@@ -1,5 +1,6 @@
-using System.Collections.Concurrent;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Domain.Enums;
+using System.Collections.Concurrent;
 
 namespace FileProcessingService.Worker;
 
@@ -45,7 +46,7 @@ public class ImportWorker(IServiceScopeFactory scopeFactory, ILogger<ImportWorke
             var jobRepository = scope.ServiceProvider.GetRequiredService<IImportJobRepository>();
 
             var job = await jobRepository.ClaimNextPendingJobAsync(stoppingToken);
-            if (job is null)
+            if (job is null || job.Status != ImportStatus.Processing)
             {
                 concurrencyLimiter.Release();
                 return;
@@ -76,7 +77,7 @@ public class ImportWorker(IServiceScopeFactory scopeFactory, ILogger<ImportWorke
 
             await processor.ProcessJob(job, stoppingToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
             logger.LogError(ex, "Unhandled error while processing import job {ImportJobId}", jobId);
         }

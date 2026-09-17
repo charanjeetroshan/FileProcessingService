@@ -1,3 +1,4 @@
+using FileProcessingService.Domain.Exceptions;
 using FileProcessingService.Infrastructure.FileStorage;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
@@ -46,5 +47,46 @@ public class LocalFileStorageServiceTests
 
         var savedText = await File.ReadAllTextAsync(Path.Combine(tempDirectory, storedFileName));
         Assert.That(savedText, Is.EqualTo(text));
+    }
+
+    [Test]
+    public async Task DeleteFile_WithExistingFile_DeletesFile()
+    {
+        Directory.CreateDirectory(tempDirectory);
+        var filePath = Path.Combine(tempDirectory, "to-delete.txt");
+        await File.WriteAllTextAsync(filePath, "content");
+
+        service.DeleteFile(filePath);
+
+        Assert.That(File.Exists(filePath), Is.False);
+    }
+
+    [Test]
+    public void DeleteFile_WithMissingFile_ThrowsFileProcessingException()
+    {
+        var filePath = Path.Combine(tempDirectory, "missing.txt");
+
+        Assert.Throws<FileProcessingException>(() => service.DeleteFile(filePath));
+    }
+
+    [Test]
+    public async Task GetFilesAt_WithExistingDirectory_ReturnsFiles()
+    {
+        Directory.CreateDirectory(tempDirectory);
+        var filePath = Path.Combine(tempDirectory, "file1.txt");
+        await File.WriteAllTextAsync(filePath, "content");
+
+        var files = service.GetFilesAt(tempDirectory);
+
+        Assert.That(files, Has.Length.EqualTo(1));
+        Assert.That(files[0], Is.EqualTo(filePath));
+    }
+
+    [Test]
+    public void GetFilesAt_WithMissingDirectory_ReturnsEmptyArray()
+    {
+        var files = service.GetFilesAt(tempDirectory);
+
+        Assert.That(files, Is.Empty);
     }
 }

@@ -237,4 +237,60 @@ public class ImportJobRepositoryTests
         Assert.That(totalCount, Is.EqualTo(0));
         Assert.That(items, Is.Empty);
     }
+
+    [Test]
+    public async Task GetCompletedJobsByFileNamesAsync_ReturnsOnlyCompletedMatchingJobs()
+    {
+        var completed = CreateJob(status: ImportStatus.Completed);
+        var pending = CreateJob(status: ImportStatus.Pending);
+        await repository.AddAsync(completed);
+        await repository.AddAsync(pending);
+
+        var result = await repository.GetCompletedJobsByFileNamesAsync([completed.StoredFileName, pending.StoredFileName]);
+
+        Assert.That(result, Has.Length.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(completed.Id));
+    }
+
+    [Test]
+    public async Task GetCompletedJobsByFileNamesAsync_WithNoMatches_ReturnsEmpty()
+    {
+        var completed = CreateJob(status: ImportStatus.Completed);
+        await repository.AddAsync(completed);
+
+        var result = await repository.GetCompletedJobsByFileNamesAsync(["nonexistent.csv"]);
+
+        Assert.That(result, Is.Empty);
+    }
+
+    [Test]
+    public async Task GetAllTrackedFileNamesAsync_ReturnsFileNamesRegardlessOfStatus()
+    {
+        var pending = CreateJob(status: ImportStatus.Pending);
+        var processing = CreateJob(status: ImportStatus.Processing);
+        var completed = CreateJob(status: ImportStatus.Completed);
+        var failed = CreateJob(status: ImportStatus.Failed);
+        await repository.AddAsync(pending);
+        await repository.AddAsync(processing);
+        await repository.AddAsync(completed);
+        await repository.AddAsync(failed);
+
+        var result = await repository.GetAllTrackedFileNamesAsync();
+
+        Assert.That(result, Is.EquivalentTo(new[]
+        {
+            pending.StoredFileName,
+            processing.StoredFileName,
+            completed.StoredFileName,
+            failed.StoredFileName
+        }));
+    }
+
+    [Test]
+    public async Task GetAllTrackedFileNamesAsync_WithNoJobs_ReturnsEmpty()
+    {
+        var result = await repository.GetAllTrackedFileNamesAsync();
+
+        Assert.That(result, Is.Empty);
+    }
 }

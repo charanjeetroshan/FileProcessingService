@@ -11,4 +11,7 @@ public class FileStorageOptions
 
     [Required(AllowEmptyStrings = false, ErrorMessage = $"{nameof(ExportDirectoryPath)} is not configured. Check appsettings.json.")]
     public string ExportDirectoryPath { get; set; } = string.Empty;
+
+    [Range(1, 30, ErrorMessage = $"{nameof(FileKeepDurationInDays)} must be between 1 and 30. Check appsettings.json.")]
+    public short FileKeepDurationInDays { get; set; }
 }

@@ -13,6 +13,10 @@ public interface IImportJobRepository
 
     Task<ImportJob?> ClaimNextPendingJobAsync(CancellationToken cancellationToken = default);
 
+    Task<ImportJob[]> GetCompletedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default);
+
+    Task<string[]> GetAllTrackedFileNamesAsync(CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<ImportJob> Items, int TotalCount)> GetPagedAsync(
         int page,
         int pageSize,

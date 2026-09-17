@@ -4,6 +4,8 @@ namespace FileProcessingService.Domain.Exceptions;
 
 public class FileProcessingException : Exception
 {
+    public FileProcessingException(string message) : base(message) { }
+
     public FileProcessingException(HttpStatusCode statusCode, string message) : base(message)
     {
         StatusCode = statusCode;

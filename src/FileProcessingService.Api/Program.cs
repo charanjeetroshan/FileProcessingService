@@ -1,6 +1,6 @@
 using FileProcessingService.Api.Extensions;
 using FileProcessingService.Application.Extensions;
-using FileProcessingService.Infrastructure.DependencyInjection;
+using FileProcessingService.Infrastructure.Extensions;
 using Serilog;
 
 try

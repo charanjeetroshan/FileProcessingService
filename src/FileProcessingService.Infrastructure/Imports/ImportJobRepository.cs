@@ -83,7 +83,7 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
         DateTimeOffset? createdTo = null,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.ImportJobs.AsQueryable();
+        var query = dbContext.ImportJobs.AsQueryable().AsNoTracking();
 
         if (status is not null)
         {
@@ -114,5 +114,19 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
             .ToList();
 
         return (items, totalCount);
+    }
+
+    public async Task<ImportJob[]> GetCompletedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.ImportJobs
+            .Where(job => job.Status == ImportStatus.Completed && fileNames.Contains(job.StoredFileName))
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<string[]> GetAllTrackedFileNamesAsync(CancellationToken cancellationToken = default)
+    {
+        return await dbContext.ImportJobs.AsNoTracking()
+            .Select(job => job.StoredFileName)
+            .ToArrayAsync(cancellationToken);
     }
 }

@@ -1,5 +1,6 @@
 using FileProcessingService.Application.Imports;
 using FileProcessingService.Domain.Entities;
+using FileProcessingService.Domain.Enums;
 using FileProcessingService.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,7 +38,11 @@ public class ImportWorkerTests
 
         var repositoryMock = new Mock<IImportJobRepository>();
         repositoryMock.SetupSequence(r => r.ClaimNextPendingJobAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(job)
+            .ReturnsAsync(() =>
+            {
+                job.Status = ImportStatus.Processing;
+                return job;
+            })
             .ReturnsAsync((ImportJob?)null);
         repositoryMock.Setup(r => r.GetByIdAsync(job.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(job);
@@ -88,7 +93,11 @@ public class ImportWorkerTests
 
         var repositoryMock = new Mock<IImportJobRepository>();
         repositoryMock.SetupSequence(r => r.ClaimNextPendingJobAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(job)
+            .ReturnsAsync(() =>
+            {
+                job.Status = ImportStatus.Processing;
+                return job;
+            })
             .ReturnsAsync((ImportJob?)null);
         repositoryMock.Setup(r => r.GetByIdAsync(job.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(job);

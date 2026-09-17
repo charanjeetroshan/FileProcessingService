@@ -1,4 +1,5 @@
 using FileProcessingService.Application.Abstractions;
+using FileProcessingService.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace FileProcessingService.Infrastructure.FileStorage;
@@ -19,5 +20,28 @@ public class LocalFileStorageService(ILogger<LocalFileStorageService> logger) : 
         logger.LogInformation("Saved uploaded file {OriginalFileName} as {StoredFileName}", fileName, storedFileName);
 
         return storedFileName;
+    }
+
+    public void DeleteFile(string filePath)
+    {
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+            logger.LogInformation("Deleted file {FilePath}", filePath);
+        }
+        else
+        {
+            throw new FileProcessingException($"File or directory {filePath} does not exist");
+        }
+    }
+
+    public string[] GetFilesAt(string directoryPath)
+    {
+        if (Directory.Exists(directoryPath))
+        {
+            return Directory.GetFiles(directoryPath);
+        }
+
+        return [];
     }
 }

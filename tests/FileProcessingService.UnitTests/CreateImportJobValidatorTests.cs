@@ -1,7 +1,7 @@
 using FileProcessingService.Application.Contracts;
 using FileProcessingService.Application.Validation.Validators;
 using Microsoft.AspNetCore.Http;
-using Moq;
+using NSubstitute;
 
 namespace FileProcessingService.UnitTests;
 
@@ -17,10 +17,10 @@ public class CreateImportJobValidatorTests
 
     private static IFormFile CreateFormFile(string fileName, long length)
     {
-        var mock = new Mock<IFormFile>();
-        mock.Setup(f => f.FileName).Returns(fileName);
-        mock.Setup(f => f.Length).Returns(length);
-        return mock.Object;
+        var file = Substitute.For<IFormFile>();
+        file.FileName.Returns(fileName);
+        file.Length.Returns(length);
+        return file;
     }
 
     [Test]

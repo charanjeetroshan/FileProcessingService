@@ -8,7 +8,8 @@ using FileProcessingService.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Moq;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace FileProcessingService.UnitTests;
 
@@ -41,8 +42,8 @@ public class FileWatcherServiceTests
     }
 
     private ServiceProvider BuildServiceProvider(
-        Mock<ICleanupJobRepository> cleanupJobRepositoryMock,
-        Mock<IImportJobRepository> importJobRepositoryMock,
+        ICleanupJobRepository cleanupJobRepositoryMock,
+        IImportJobRepository importJobRepositoryMock,
         out IOptions<FileStorageOptions> options)
     {
         var fileStorageOptions = new FileStorageOptions
@@ -54,8 +55,8 @@ public class FileWatcherServiceTests
         options = Options.Create(fileStorageOptions);
 
         var services = new ServiceCollection();
-        services.AddScoped(_ => cleanupJobRepositoryMock.Object);
-        services.AddScoped(_ => importJobRepositoryMock.Object);
+        services.AddScoped(_ => cleanupJobRepositoryMock);
+        services.AddScoped(_ => importJobRepositoryMock);
         services.AddScoped<IFileStorageService>(_ => new LocalFileStorageService(NullLogger<LocalFileStorageService>.Instance));
         return services.BuildServiceProvider();
     }
@@ -70,14 +71,14 @@ public class FileWatcherServiceTests
         await stopTask;
     }
 
-    private static Mock<ICleanupJobRepository> CreateDefaultCleanupJobRepositoryMock(TaskCompletionSource savedSignal)
+    private static ICleanupJobRepository CreateDefaultCleanupJobRepositoryMock(TaskCompletionSource savedSignal)
     {
-        var mock = new Mock<ICleanupJobRepository>();
-        mock.Setup(r => r.GetExistingCleanupFilePathsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        mock.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+        var mock = Substitute.For<ICleanupJobRepository>();
+        mock.GetExistingCleanupFilePathsAsync(Arg.Any<CancellationToken>())
+            .Returns([]);
+        mock.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback(() => savedSignal.TrySetResult());
+            .AndDoes(_ => savedSignal.TrySetResult());
         return mock;
     }
 
@@ -98,15 +99,15 @@ public class FileWatcherServiceTests
         var savedSignal = new TaskCompletionSource();
         var cleanupJobRepositoryMock = CreateDefaultCleanupJobRepositoryMock(savedSignal);
         List<CleanupJob>? addedJobs = null;
-        cleanupJobRepositoryMock.Setup(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()))
+        cleanupJobRepositoryMock.AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback<IEnumerable<CleanupJob>, CancellationToken>((jobs, _) => addedJobs = [.. jobs]);
+            .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([completedJob]);
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([storedFileName]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([completedJob]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([storedFileName]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -138,18 +139,18 @@ public class FileWatcherServiceTests
         };
 
         var scanCompletedSignal = new TaskCompletionSource();
-        var cleanupJobRepositoryMock = new Mock<ICleanupJobRepository>();
-        cleanupJobRepositoryMock.Setup(r => r.GetExistingCleanupFilePathsAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([filePath]);
-        cleanupJobRepositoryMock.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+        var cleanupJobRepositoryMock = Substitute.For<ICleanupJobRepository>();
+        cleanupJobRepositoryMock.GetExistingCleanupFilePathsAsync(Arg.Any<CancellationToken>())
+            .Returns([filePath]);
+        cleanupJobRepositoryMock.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback(() => scanCompletedSignal.TrySetResult());
+            .AndDoes(_ => scanCompletedSignal.TrySetResult());
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([completedJob]);
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([storedFileName]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([completedJob]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([storedFileName]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -161,7 +162,7 @@ public class FileWatcherServiceTests
 
         await StopWithTimeoutAsync(worker, TimeSpan.FromSeconds(15));
 
-        cleanupJobRepositoryMock.Verify(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()), Times.Never);
+        await cleanupJobRepositoryMock.DidNotReceive().AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -174,15 +175,15 @@ public class FileWatcherServiceTests
         var savedSignal = new TaskCompletionSource();
         var cleanupJobRepositoryMock = CreateDefaultCleanupJobRepositoryMock(savedSignal);
         List<CleanupJob>? addedJobs = null;
-        cleanupJobRepositoryMock.Setup(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()))
+        cleanupJobRepositoryMock.AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback<IEnumerable<CleanupJob>, CancellationToken>((jobs, _) => addedJobs = [.. jobs]);
+            .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -208,16 +209,16 @@ public class FileWatcherServiceTests
         var savedSignal = new TaskCompletionSource();
         var cleanupJobRepositoryMock = CreateDefaultCleanupJobRepositoryMock(savedSignal);
         List<CleanupJob>? addedJobs = null;
-        cleanupJobRepositoryMock.Setup(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()))
+        cleanupJobRepositoryMock.AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback<IEnumerable<CleanupJob>, CancellationToken>((jobs, _) => addedJobs = [.. jobs]);
+            .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([]);
         // The file has a tracked (in-progress) import job, so it must not be treated as anonymous.
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([storedFileName]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([storedFileName]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -242,15 +243,15 @@ public class FileWatcherServiceTests
         var savedSignal = new TaskCompletionSource();
         var cleanupJobRepositoryMock = CreateDefaultCleanupJobRepositoryMock(savedSignal);
         List<CleanupJob>? addedJobs = null;
-        cleanupJobRepositoryMock.Setup(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()))
+        cleanupJobRepositoryMock.AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback<IEnumerable<CleanupJob>, CancellationToken>((jobs, _) => addedJobs = [.. jobs]);
+            .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -276,15 +277,15 @@ public class FileWatcherServiceTests
         var savedSignal = new TaskCompletionSource();
         var cleanupJobRepositoryMock = CreateDefaultCleanupJobRepositoryMock(savedSignal);
         List<CleanupJob>? addedJobs = null;
-        cleanupJobRepositoryMock.Setup(r => r.AddJobsAsync(It.IsAny<IEnumerable<CleanupJob>>(), It.IsAny<CancellationToken>()))
+        cleanupJobRepositoryMock.AddJobsAsync(Arg.Any<IEnumerable<CleanupJob>>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback<IEnumerable<CleanupJob>, CancellationToken>((jobs, _) => addedJobs = [.. jobs]);
+            .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
-        importJobRepositoryMock.Setup(r => r.GetCompletedJobsByFileNamesAsync(It.IsAny<string[]>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        importJobRepositoryMock.Setup(r => r.GetAllTrackedFileNamesAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
+        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+            .Returns([]);
+        importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
+            .Returns([]);
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());
@@ -302,11 +303,11 @@ public class FileWatcherServiceTests
     [Test]
     public async Task ExecuteAsync_WhenRepositoryThrows_DoesNotCrashWorker()
     {
-        var cleanupJobRepositoryMock = new Mock<ICleanupJobRepository>();
-        cleanupJobRepositoryMock.Setup(r => r.GetExistingCleanupFilePathsAsync(It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("db unavailable"));
+        var cleanupJobRepositoryMock = Substitute.For<ICleanupJobRepository>();
+        cleanupJobRepositoryMock.GetExistingCleanupFilePathsAsync(Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("db unavailable"));
 
-        var importJobRepositoryMock = new Mock<IImportJobRepository>();
+        var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
 
         using var serviceProvider = BuildServiceProvider(cleanupJobRepositoryMock, importJobRepositoryMock, out var options);
         var worker = new FileWatcherService(options, NullLogger<FileWatcherService>.Instance, serviceProvider.GetRequiredService<IServiceScopeFactory>());

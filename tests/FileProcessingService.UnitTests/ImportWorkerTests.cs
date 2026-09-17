@@ -4,19 +4,20 @@ using FileProcessingService.Domain.Enums;
 using FileProcessingService.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace FileProcessingService.UnitTests;
 
 public class ImportWorkerTests
 {
     private static ServiceProvider BuildServiceProvider(
-        Mock<IImportJobRepository> repositoryMock,
-        Mock<IImportJobProcessor> processorMock)
+        IImportJobRepository repositoryMock,
+        IImportJobProcessor processorMock)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => repositoryMock.Object);
-        services.AddScoped(_ => processorMock.Object);
+        services.AddScoped(_ => repositoryMock);
+        services.AddScoped(_ => processorMock);
         return services.BuildServiceProvider();
     }
 
@@ -36,21 +37,20 @@ public class ImportWorkerTests
         var job = new ImportJob { OriginalFileName = "file.csv", StoredFileName = "stored.csv" };
         var processedSignal = new TaskCompletionSource();
 
-        var repositoryMock = new Mock<IImportJobRepository>();
-        repositoryMock.SetupSequence(r => r.ClaimNextPendingJobAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() =>
+        var repositoryMock = Substitute.For<IImportJobRepository>();
+        repositoryMock.ClaimNextPendingJobAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
             {
                 job.Status = ImportStatus.Processing;
                 return job;
-            })
-            .ReturnsAsync((ImportJob?)null);
-        repositoryMock.Setup(r => r.GetByIdAsync(job.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(job);
+            }, _ => (ImportJob?)null);
+        repositoryMock.GetByIdAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
 
-        var processorMock = new Mock<IImportJobProcessor>();
-        processorMock.Setup(p => p.ProcessJob(job, It.IsAny<CancellationToken>()))
+        var processorMock = Substitute.For<IImportJobProcessor>();
+        processorMock.ProcessJob(job, Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback(() => processedSignal.TrySetResult());
+            .AndDoes(_ => processedSignal.TrySetResult());
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, processorMock);
         var worker = new ImportWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<ImportWorker>.Instance);
@@ -62,17 +62,17 @@ public class ImportWorkerTests
 
         await StopWithTimeoutAsync(worker, TimeSpan.FromSeconds(10));
 
-        processorMock.Verify(p => p.ProcessJob(job, It.IsAny<CancellationToken>()), Times.Once);
+        await processorMock.Received(1).ProcessJob(job, Arg.Any<CancellationToken>());
     }
 
     [Test]
     public async Task ExecuteAsync_WithNoPendingJobs_DoesNotInvokeProcessor()
     {
-        var repositoryMock = new Mock<IImportJobRepository>();
-        repositoryMock.Setup(r => r.ClaimNextPendingJobAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync((ImportJob?)null);
+        var repositoryMock = Substitute.For<IImportJobRepository>();
+        repositoryMock.ClaimNextPendingJobAsync(Arg.Any<CancellationToken>())
+            .Returns((ImportJob?)null);
 
-        var processorMock = new Mock<IImportJobProcessor>();
+        var processorMock = Substitute.For<IImportJobProcessor>();
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, processorMock);
         var worker = new ImportWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<ImportWorker>.Instance);
@@ -82,7 +82,7 @@ public class ImportWorkerTests
 
         await StopWithTimeoutAsync(worker, TimeSpan.FromSeconds(10));
 
-        processorMock.Verify(p => p.ProcessJob(It.IsAny<ImportJob>(), It.IsAny<CancellationToken>()), Times.Never);
+        await processorMock.DidNotReceive().ProcessJob(Arg.Any<ImportJob>(), Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -91,21 +91,23 @@ public class ImportWorkerTests
         var job = new ImportJob { OriginalFileName = "file.csv", StoredFileName = "stored.csv" };
         var attemptedSignal = new TaskCompletionSource();
 
-        var repositoryMock = new Mock<IImportJobRepository>();
-        repositoryMock.SetupSequence(r => r.ClaimNextPendingJobAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(() =>
+        var repositoryMock = Substitute.For<IImportJobRepository>();
+        repositoryMock.ClaimNextPendingJobAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
             {
                 job.Status = ImportStatus.Processing;
                 return job;
-            })
-            .ReturnsAsync((ImportJob?)null);
-        repositoryMock.Setup(r => r.GetByIdAsync(job.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(job);
+            }, _ => (ImportJob?)null);
+        repositoryMock.GetByIdAsync(job.Id, Arg.Any<CancellationToken>())
+            .Returns(job);
 
-        var processorMock = new Mock<IImportJobProcessor>();
-        processorMock.Setup(p => p.ProcessJob(job, It.IsAny<CancellationToken>()))
-            .Callback(() => attemptedSignal.TrySetResult())
-            .ThrowsAsync(new InvalidOperationException("boom"));
+        var processorMock = Substitute.For<IImportJobProcessor>();
+        processorMock.ProcessJob(job, Arg.Any<CancellationToken>())
+            .Returns<Task>(_ =>
+            {
+                attemptedSignal.TrySetResult();
+                throw new InvalidOperationException("boom");
+            });
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, processorMock);
         var worker = new ImportWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<ImportWorker>.Instance);

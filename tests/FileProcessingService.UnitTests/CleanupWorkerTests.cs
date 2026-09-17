@@ -5,19 +5,20 @@ using FileProcessingService.Domain.Enums;
 using FileProcessingService.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace FileProcessingService.UnitTests;
 
 public class CleanupWorkerTests
 {
     private static ServiceProvider BuildServiceProvider(
-        Mock<ICleanupJobRepository> repositoryMock,
-        Mock<IFileStorageService> fileStorageMock)
+        ICleanupJobRepository repositoryMock,
+        IFileStorageService fileStorageMock)
     {
         var services = new ServiceCollection();
-        services.AddScoped(_ => repositoryMock.Object);
-        services.AddScoped(_ => fileStorageMock.Object);
+        services.AddScoped(_ => repositoryMock);
+        services.AddScoped(_ => fileStorageMock);
         return services.BuildServiceProvider();
     }
 
@@ -44,15 +45,14 @@ public class CleanupWorkerTests
         var job = CreateJob("C:/temp/file.csv");
         var savedSignal = new TaskCompletionSource();
 
-        var repositoryMock = new Mock<ICleanupJobRepository>();
-        repositoryMock.SetupSequence(r => r.ClaimByCountAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([job])
-            .ReturnsAsync([]);
-        repositoryMock.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+        var repositoryMock = Substitute.For<ICleanupJobRepository>();
+        repositoryMock.ClaimByCountAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([job], []);
+        repositoryMock.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback(() => savedSignal.TrySetResult());
+            .AndDoes(_ => savedSignal.TrySetResult());
 
-        var fileStorageMock = new Mock<IFileStorageService>();
+        var fileStorageMock = Substitute.For<IFileStorageService>();
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, fileStorageMock);
         var worker = new CleanupWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CleanupWorker>.Instance);
@@ -64,7 +64,7 @@ public class CleanupWorkerTests
 
         await StopWithTimeoutAsync(worker, TimeSpan.FromSeconds(10));
 
-        fileStorageMock.Verify(f => f.DeleteFile(job.FilePath), Times.Once);
+        fileStorageMock.Received(1).DeleteFile(job.FilePath);
         Assert.That(job.Status, Is.EqualTo(CleanupStatus.Done));
         Assert.That(job.CompletedAt, Is.Not.Null);
     }
@@ -72,11 +72,11 @@ public class CleanupWorkerTests
     [Test]
     public async Task ExecuteAsync_WithNoPendingJobs_DoesNotCallDeleteFile()
     {
-        var repositoryMock = new Mock<ICleanupJobRepository>();
-        repositoryMock.Setup(r => r.ClaimByCountAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var repositoryMock = Substitute.For<ICleanupJobRepository>();
+        repositoryMock.ClaimByCountAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([]);
 
-        var fileStorageMock = new Mock<IFileStorageService>();
+        var fileStorageMock = Substitute.For<IFileStorageService>();
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, fileStorageMock);
         var worker = new CleanupWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CleanupWorker>.Instance);
@@ -86,8 +86,8 @@ public class CleanupWorkerTests
 
         await StopWithTimeoutAsync(worker, TimeSpan.FromSeconds(10));
 
-        fileStorageMock.Verify(f => f.DeleteFile(It.IsAny<string>()), Times.Never);
-        repositoryMock.Verify(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        fileStorageMock.DidNotReceive().DeleteFile(Arg.Any<string>());
+        await repositoryMock.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Test]
@@ -96,17 +96,16 @@ public class CleanupWorkerTests
         var job = CreateJob("C:/temp/missing.csv");
         var savedSignal = new TaskCompletionSource();
 
-        var repositoryMock = new Mock<ICleanupJobRepository>();
-        repositoryMock.SetupSequence(r => r.ClaimByCountAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([job])
-            .ReturnsAsync([]);
-        repositoryMock.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
+        var repositoryMock = Substitute.For<ICleanupJobRepository>();
+        repositoryMock.ClaimByCountAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns([job], []);
+        repositoryMock.SaveChangesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
-            .Callback(() => savedSignal.TrySetResult());
+            .AndDoes(_ => savedSignal.TrySetResult());
 
-        var fileStorageMock = new Mock<IFileStorageService>();
-        fileStorageMock.Setup(f => f.DeleteFile(job.FilePath))
-            .Throws(new InvalidOperationException("file not found"));
+        var fileStorageMock = Substitute.For<IFileStorageService>();
+        fileStorageMock.When(f => f.DeleteFile(job.FilePath))
+            .Do(_ => throw new InvalidOperationException("file not found"));
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, fileStorageMock);
         var worker = new CleanupWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CleanupWorker>.Instance);
@@ -125,11 +124,11 @@ public class CleanupWorkerTests
     [Test]
     public async Task ExecuteAsync_WhenClaimByCountThrows_DoesNotCrashWorker()
     {
-        var repositoryMock = new Mock<ICleanupJobRepository>();
-        repositoryMock.Setup(r => r.ClaimByCountAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("db unavailable"));
+        var repositoryMock = Substitute.For<ICleanupJobRepository>();
+        repositoryMock.ClaimByCountAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Throws(new InvalidOperationException("db unavailable"));
 
-        var fileStorageMock = new Mock<IFileStorageService>();
+        var fileStorageMock = Substitute.For<IFileStorageService>();
 
         using var serviceProvider = BuildServiceProvider(repositoryMock, fileStorageMock);
         var worker = new CleanupWorker(serviceProvider.GetRequiredService<IServiceScopeFactory>(), NullLogger<CleanupWorker>.Instance);

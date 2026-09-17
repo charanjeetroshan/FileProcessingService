@@ -9,7 +9,8 @@ using FluentValidation.Results;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Moq;
+using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 namespace FileProcessingService.UnitTests;
 
@@ -18,8 +19,8 @@ public class ImportJobProcessorTests
     private FileProcessingDbContext dbContext = null!;
     private SqliteConnection connection = null!;
     private string uploadDirectory = null!;
-    private Mock<ICsvCustomerFileReader> csvReaderMock = null!;
-    private Mock<IValidator<CustomerImportRow>> validatorMock = null!;
+    private ICsvCustomerFileReader csvReaderMock = null!;
+    private IValidator<CustomerImportRow> validatorMock = null!;
 
     [SetUp]
     public void Setup()
@@ -28,8 +29,8 @@ public class ImportJobProcessorTests
         uploadDirectory = Path.Combine(Path.GetTempPath(), $"import-job-processor-tests-{Guid.NewGuid()}");
         Directory.CreateDirectory(uploadDirectory);
 
-        csvReaderMock = new Mock<ICsvCustomerFileReader>();
-        validatorMock = new Mock<IValidator<CustomerImportRow>>();
+        csvReaderMock = Substitute.For<ICsvCustomerFileReader>();
+        validatorMock = Substitute.For<IValidator<CustomerImportRow>>();
     }
 
     [TearDown]
@@ -47,7 +48,7 @@ public class ImportJobProcessorTests
     private ImportJobProcessor CreateProcessor()
     {
         var options = Options.Create(new FileStorageOptions { UploadDirectoryPath = uploadDirectory });
-        return new ImportJobProcessor(options, csvReaderMock.Object, validatorMock.Object, dbContext, NullLogger<ImportJobProcessor>.Instance);
+        return new ImportJobProcessor(options, csvReaderMock, validatorMock, dbContext, NullLogger<ImportJobProcessor>.Instance);
     }
 
     private ImportJob CreateAndPersistJob()
@@ -83,10 +84,10 @@ public class ImportJobProcessorTests
             new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", DateOfBirth = "1990-01-01", Country = "US" }
         };
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(rows));
-        validatorMock.Setup(v => v.ValidateAsync(It.IsAny<CustomerImportRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult());
+        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
+            .Returns(new ValidationResult());
 
         var processor = CreateProcessor();
         await processor.ProcessJob(job, CancellationToken.None);
@@ -107,10 +108,10 @@ public class ImportJobProcessorTests
             new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "", DateOfBirth = "1990-01-01", Country = "US" }
         };
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(rows));
-        validatorMock.Setup(v => v.ValidateAsync(It.IsAny<CustomerImportRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult([new ValidationFailure("Email", "Email is required") { ErrorCode = "Email.Required" }]));
+        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
+            .Returns(new ValidationResult([new ValidationFailure("Email", "Email is required") { ErrorCode = "Email.Required" }]));
 
         var processor = CreateProcessor();
         await processor.ProcessJob(job, CancellationToken.None);
@@ -132,10 +133,10 @@ public class ImportJobProcessorTests
             new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", DateOfBirth = "not-a-date", Country = "US" }
         };
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(rows));
-        validatorMock.Setup(v => v.ValidateAsync(It.IsAny<CustomerImportRow>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ValidationResult());
+        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
+            .Returns(new ValidationResult());
 
         var processor = CreateProcessor();
         await processor.ProcessJob(job, CancellationToken.None);
@@ -156,10 +157,10 @@ public class ImportJobProcessorTests
             new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", DateOfBirth = "1990-01-01", Country = "US" }
         };
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(rows));
-        validatorMock.Setup(v => v.ValidateAsync(It.IsAny<CustomerImportRow>(), It.IsAny<CancellationToken>()))
-            .Returns(async () =>
+        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
+            .Returns(async _ =>
             {
                 cts.Cancel();
                 cts.Token.ThrowIfCancellationRequested();
@@ -180,7 +181,7 @@ public class ImportJobProcessorTests
     {
         var job = CreateAndPersistJob();
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Throws(new InvalidOperationException("Corrupt file"));
 
         var processor = CreateProcessor();
@@ -195,7 +196,7 @@ public class ImportJobProcessorTests
     {
         var job = CreateAndPersistJob();
 
-        csvReaderMock.Setup(r => r.ReadAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable([]));
 
         var processor = CreateProcessor();

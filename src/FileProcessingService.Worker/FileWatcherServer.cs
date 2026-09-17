@@ -115,7 +115,7 @@ public class FileWatcherService(
 
         if (cleanupJobs.Count == 0)
         {
-            logger.LogDebug("Scan at {Directory} for {FileCategory} files completed. No jobs were created.", scannedDirectory, fileCategory);
+            logger.LogTrace("Scan at {Directory} for {FileCategory} files completed. No jobs were created.", scannedDirectory, fileCategory);
             return;
         }
 
@@ -125,7 +125,7 @@ public class FileWatcherService(
         }
 
         await cleanupJobRepository.AddJobsAsync(cleanupJobs, cancellationToken);
-        logger.LogDebug(
+        logger.LogTrace(
             "Scan at {Directory} for {FileCategory} files completed. Total jobs created: {Count}", scannedDirectory, fileCategory, cleanupJobs.Count);
     }
 }

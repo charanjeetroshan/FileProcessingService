@@ -17,6 +17,7 @@ public class CleanupJobRepository(FileProcessingDbContext db) : ICleanupJobRepos
     {
         var jobs = await db.CleanupJobs
             .Where(job => job.Status == CleanupStatus.Pending)
+            .OrderBy(job => job.CreatedAt)
             .Take(count)
             .ToArrayAsync(cancellationToken);
 

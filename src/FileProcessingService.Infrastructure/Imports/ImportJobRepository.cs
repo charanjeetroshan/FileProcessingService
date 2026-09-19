@@ -19,6 +19,7 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
 
     public Task<ImportJob?> GetByFileHashAsync(string fileHash, CancellationToken cancellationToken = default)
         => dbContext.ImportJobs
+            .AsNoTracking()
             .Where(job => job.FileHash == fileHash
                 && job.Status != ImportStatus.Failed
                 && job.Status != ImportStatus.Cancelled)
@@ -110,13 +111,15 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
     public async Task<ImportJob[]> GetCompletedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default)
     {
         return await dbContext.ImportJobs
+            .AsNoTracking()
             .Where(job => job.Status == ImportStatus.Completed && fileNames.Contains(job.StoredFileName))
             .ToArrayAsync(cancellationToken);
     }
 
     public async Task<string[]> GetAllTrackedFileNamesAsync(CancellationToken cancellationToken = default)
     {
-        return await dbContext.ImportJobs.AsNoTracking()
+        return await dbContext.ImportJobs
+            .AsNoTracking()
             .Select(job => job.StoredFileName)
             .ToArrayAsync(cancellationToken);
     }

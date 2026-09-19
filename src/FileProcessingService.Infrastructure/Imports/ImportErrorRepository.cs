@@ -16,6 +16,7 @@ public class ImportErrorRepository(FileProcessingDbContext dbContext) : IImportE
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.ImportErrors
+            .AsNoTracking()
             .Where(error => error.ImportJobId == importJobId);
 
         if (!string.IsNullOrWhiteSpace(field))

@@ -10,7 +10,7 @@ public class CustomerRepository(FileProcessingDbContext dbContext) : ICustomerRe
 {
     public async Task<Customer?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
-        return await dbContext.Customers.FirstOrDefaultAsync(customer => customer.Email == email, cancellationToken);
+        return await dbContext.Customers.AsNoTracking().FirstOrDefaultAsync(customer => customer.Email == email, cancellationToken);
     }
 
     public async Task AddAsync(Customer customer, CancellationToken cancellationToken = default)

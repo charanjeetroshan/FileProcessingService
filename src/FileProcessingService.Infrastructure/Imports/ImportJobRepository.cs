@@ -108,11 +108,13 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
         return (items, totalCount);
     }
 
-    public async Task<ImportJob[]> GetCompletedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default)
+    public async Task<ImportJob[]> GetProcessedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default)
     {
+        ImportStatus[] allowedStatuses = [ImportStatus.Completed, ImportStatus.Failed];
+
         return await dbContext.ImportJobs
             .AsNoTracking()
-            .Where(job => job.Status == ImportStatus.Completed && fileNames.Contains(job.StoredFileName))
+            .Where(job => allowedStatuses.Contains(job.Status) && fileNames.Contains(job.StoredFileName))
             .ToArrayAsync(cancellationToken);
     }
 
@@ -122,5 +124,10 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
             .AsNoTracking()
             .Select(job => job.StoredFileName)
             .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task SaveChangesAsync(CancellationToken cancellationToken)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

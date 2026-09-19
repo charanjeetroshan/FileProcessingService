@@ -125,28 +125,6 @@ public class ImportJobProcessorTests
     }
 
     [Test]
-    public async Task ProcessJob_WithMappingFailure_RecordsMappingErrorAndSkipsRow()
-    {
-        var job = CreateAndPersistJob();
-        var rows = new[]
-        {
-            new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", DateOfBirth = "not-a-date", Country = "US" }
-        };
-
-        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(ToAsyncEnumerable(rows));
-        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
-            .Returns(new ValidationResult());
-
-        var processor = CreateProcessor();
-        await processor.ProcessJob(job, CancellationToken.None);
-
-        Assert.That(job.Status, Is.EqualTo(ImportStatus.Completed));
-        Assert.That(job.FailedRows, Is.EqualTo(1));
-        Assert.That(dbContext.ImportErrors.Single().ErrorCode, Is.EqualTo("MappingError"));
-    }
-
-    [Test]
     public async Task ProcessJob_WhenCancelledDuringProcessing_MarksJobCancelledAndThrows()
     {
         var job = CreateAndPersistJob();

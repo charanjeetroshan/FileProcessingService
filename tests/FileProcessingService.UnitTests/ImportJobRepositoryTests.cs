@@ -239,26 +239,26 @@ public class ImportJobRepositoryTests
     }
 
     [Test]
-    public async Task GetCompletedJobsByFileNamesAsync_ReturnsOnlyCompletedMatchingJobs()
+    public async Task GetProcessedJobsByFileNamesAsync_ReturnsOnlyCompletedMatchingJobs()
     {
         var completed = CreateJob(status: ImportStatus.Completed);
         var pending = CreateJob(status: ImportStatus.Pending);
         await repository.AddAsync(completed);
         await repository.AddAsync(pending);
 
-        var result = await repository.GetCompletedJobsByFileNamesAsync([completed.StoredFileName, pending.StoredFileName]);
+        var result = await repository.GetProcessedJobsByFileNamesAsync([completed.StoredFileName, pending.StoredFileName]);
 
         Assert.That(result, Has.Length.EqualTo(1));
         Assert.That(result[0].Id, Is.EqualTo(completed.Id));
     }
 
     [Test]
-    public async Task GetCompletedJobsByFileNamesAsync_WithNoMatches_ReturnsEmpty()
+    public async Task GetProcessedJobsByFileNamesAsync_WithNoMatches_ReturnsEmpty()
     {
         var completed = CreateJob(status: ImportStatus.Completed);
         await repository.AddAsync(completed);
 
-        var result = await repository.GetCompletedJobsByFileNamesAsync(["nonexistent.csv"]);
+        var result = await repository.GetProcessedJobsByFileNamesAsync(["nonexistent.csv"]);
 
         Assert.That(result, Is.Empty);
     }

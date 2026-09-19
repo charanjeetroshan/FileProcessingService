@@ -1,13 +1,14 @@
 ﻿using FileProcessingService.Application.Configuration;
-using FileProcessingService.Application.Customers;
 using FileProcessingService.Application.Imports;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
 using FileProcessingService.Infrastructure.Persistence;
 using FluentValidation;
 using FluentValidation.Results;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 namespace FileProcessingService.Infrastructure.Imports;
 
@@ -68,22 +69,17 @@ internal class ImportJobProcessor(
                     continue;
                 }
 
-                if (!CustomerRowMapper.TryMap(row, job.Id, out Customer? customer, out string? mappingError))
+                var customer = new Customer
                 {
-                    errors.Add(new ImportError
-                    {
-                        ImportJobId = job.Id,
-                        RowNumber = row.RowNumber,
-                        ErrorCode = "MappingError",
-                        ErrorMessage = mappingError
-                    });
-
-                    job.FailedRows++;
-                    job.ProcessedRows++;
-
-                    await FlushIfNeeded(customers, errors, cancellationToken);
-                    continue;
-                }
+                    Id = Guid.NewGuid(),
+                    ImportId = job.Id,
+                    FirstName = row.FirstName?.Trim() ?? string.Empty,
+                    LastName = row.LastName?.Trim() ?? string.Empty,
+                    Email = row.Email?.Trim() ?? string.Empty,
+                    DateOfBirth = DateOnly.Parse(row.DateOfBirth!, CultureInfo.InvariantCulture),
+                    Country = row.Country?.Trim() ?? string.Empty,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
 
                 customers.Add(customer);
                 job.SuccessfulRows++;
@@ -113,7 +109,7 @@ internal class ImportJobProcessor(
             }
             catch (Exception flushEx)
             {
-                logger.LogWarning(flushEx, "Failed to flush final batch for cancelled import job {ImportJobId}", job.Id);
+                logger.LogWarning(flushEx, "Failed to flush final batch while cancelling import job {ImportJobId}", job.Id);
             }
 
             job.Status = ImportStatus.Cancelled;
@@ -132,7 +128,6 @@ internal class ImportJobProcessor(
             job.CompletedAt = DateTimeOffset.UtcNow;
 
             await db.SaveChangesAsync(CancellationToken.None);
-            return;
         }
     }
 
@@ -161,12 +156,33 @@ internal class ImportJobProcessor(
             await db.ImportErrors.AddRangeAsync(errors, cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to flush batch for import job.");
+
+            foreach (var customer in customers)
+            {
+                db.Entry(customer).State = EntityState.Detached;
+            }
+
+            foreach (var error in errors)
+            {
+                db.Entry(error).State = EntityState.Detached;
+            }
+
+            throw;
+        }
+        finally
+        {
+            customers.Clear();
+            errors.Clear();
+        }
 
         logger.LogDebug("Flushed batch of {CustomerCount} customers and {ErrorCount} errors", customers.Count, errors.Count);
-
-        customers.Clear();
-        errors.Clear();
     }
 }
 

@@ -105,7 +105,7 @@ public class FileWatcherServiceTests
             .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([completedJob]);
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
             .Returns([storedFileName]);
@@ -148,7 +148,7 @@ public class FileWatcherServiceTests
             .AndDoes(_ => scanCompletedSignal.TrySetResult());
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([completedJob]);
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
             .Returns([storedFileName]);
@@ -181,7 +181,7 @@ public class FileWatcherServiceTests
             .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([]);
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
             .Returns([]);
@@ -215,7 +215,7 @@ public class FileWatcherServiceTests
             .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([]);
         // The file has a tracked (in-progress) import job, so it must not be treated as anonymous.
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
@@ -249,7 +249,7 @@ public class FileWatcherServiceTests
             .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([]);
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
             .Returns([]);
@@ -283,7 +283,7 @@ public class FileWatcherServiceTests
             .AndDoes(callInfo => addedJobs = [.. callInfo.Arg<IEnumerable<CleanupJob>>()]);
 
         var importJobRepositoryMock = Substitute.For<IImportJobRepository>();
-        importJobRepositoryMock.GetCompletedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
+        importJobRepositoryMock.GetProcessedJobsByFileNamesAsync(Arg.Any<string[]>(), Arg.Any<CancellationToken>())
             .Returns([]);
         importJobRepositoryMock.GetAllTrackedFileNamesAsync(Arg.Any<CancellationToken>())
             .Returns([]);

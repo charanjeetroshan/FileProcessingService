@@ -62,7 +62,7 @@ public class FileWatcherService(
         CancellationToken cancellationToken)
     {
         string[] fileNames = [.. uploadedFilePaths.Select(f => Path.GetFileName(f))];
-        var completedImportJobs = await importJobRepository.GetCompletedJobsByFileNamesAsync(fileNames, cancellationToken);
+        var completedImportJobs = await importJobRepository.GetProcessedJobsByFileNamesAsync(fileNames, cancellationToken);
 
         var candidatePaths = completedImportJobs
             .Select(job => Path.Combine(uploadDirectory, job.StoredFileName))

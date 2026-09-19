@@ -13,7 +13,7 @@ public interface IImportJobRepository
 
     Task<ImportJob?> ClaimNextPendingJobAsync(CancellationToken cancellationToken = default);
 
-    Task<ImportJob[]> GetCompletedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default);
+    Task<ImportJob[]> GetProcessedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default);
 
     Task<string[]> GetAllTrackedFileNamesAsync(CancellationToken cancellationToken = default);
 
@@ -25,4 +25,6 @@ public interface IImportJobRepository
         DateTimeOffset? createdFrom = null,
         DateTimeOffset? createdTo = null,
         CancellationToken cancellationToken = default);
+
+    Task SaveChangesAsync(CancellationToken cancellationToken);
 }

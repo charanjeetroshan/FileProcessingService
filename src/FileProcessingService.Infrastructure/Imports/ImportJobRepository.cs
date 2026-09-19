@@ -17,18 +17,13 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
     public Task<ImportJob?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => dbContext.ImportJobs.FirstOrDefaultAsync(job => job.Id == id, cancellationToken);
 
-    public async Task<ImportJob?> GetByFileHashAsync(string fileHash, CancellationToken cancellationToken = default)
-    {
-        var candidates = await dbContext.ImportJobs
+    public Task<ImportJob?> GetByFileHashAsync(string fileHash, CancellationToken cancellationToken = default)
+        => dbContext.ImportJobs
             .Where(job => job.FileHash == fileHash
                 && job.Status != ImportStatus.Failed
                 && job.Status != ImportStatus.Cancelled)
-            .ToListAsync(cancellationToken);
-
-        return candidates
             .OrderByDescending(job => job.CreatedAt)
-            .FirstOrDefault();
-    }
+            .FirstOrDefaultAsync(cancellationToken);
 
     public async Task<ImportJob?> ClaimNextPendingJobAsync(CancellationToken cancellationToken = default)
     {
@@ -36,15 +31,11 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
 
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
-            var pendingCandidates = await dbContext.ImportJobs
+            var candidateId = await dbContext.ImportJobs
                 .Where(job => job.Status == ImportStatus.Pending)
-                .Select(job => new { job.Id, job.CreatedAt })
-                .ToListAsync(cancellationToken);
-
-            var candidateId = pendingCandidates
                 .OrderBy(job => job.CreatedAt)
                 .Select(job => (Guid?)job.Id)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (candidateId is null)
             {
@@ -95,23 +86,23 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
             query = query.Where(job => job.OriginalFileName.Contains(fileName));
         }
 
-        // CreatedAt (DateTimeOffset) comparisons and ordering cannot be translated to SQL by the
-        // SQLite provider, so the filtered set is materialized first and range-filtered/ordered
-        // client-side instead.
-        var totalCandidates = await query.ToListAsync(cancellationToken);
+        if (createdFrom is not null)
+        {
+            query = query.Where(job => job.CreatedAt >= createdFrom);
+        }
 
-        var filtered = totalCandidates
-            .Where(job => createdFrom is null || job.CreatedAt >= createdFrom)
-            .Where(job => createdTo is null || job.CreatedAt <= createdTo)
-            .ToList();
+        if (createdTo is not null)
+        {
+            query = query.Where(job => job.CreatedAt <= createdTo);
+        }
 
-        var totalCount = filtered.Count;
+        var totalCount = await query.CountAsync(cancellationToken);
 
-        var items = filtered
+        var items = await query
             .OrderByDescending(job => job.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return (items, totalCount);
     }

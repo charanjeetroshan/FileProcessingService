@@ -1,5 +1,5 @@
+using FileProcessingService.Application.Configuration;
 using FileProcessingService.Infrastructure.Csv;
-using FileProcessingService.Infrastructure.FileStorage;
 using FileProcessingService.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -32,7 +32,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["ConnectionStrings:FileProcessingDatabase"] = "DataSource=file-processing-tests;Mode=Memory;Cache=Shared",
                 [$"{FileStorageOptions.SectionName}:{nameof(FileStorageOptions.UploadDirectoryPath)}"] = UploadDirectoryPath,
                 [$"{FileStorageOptions.SectionName}:{nameof(FileStorageOptions.ExportDirectoryPath)}"] = ExportDirectoryPath,
-                [$"{CsvOptions.SectionName}:{nameof(CsvOptions.Separator)}"] = ","
+                [$"{CsvOptions.SectionName}:{nameof(CsvOptions.Separator)}"] = ";"
             });
         });
 

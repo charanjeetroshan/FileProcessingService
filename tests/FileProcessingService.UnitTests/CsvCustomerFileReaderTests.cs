@@ -8,7 +8,7 @@ namespace FileProcessingService.UnitTests;
 
 public class CsvCustomerFileReaderTests
 {
-    private static CsvCustomerFileReader CreateReader(string separator = ",")
+    private static CsvCustomerFileReader CreateReader(string separator = ";")
     {
         var options = Options.Create(new CsvOptions { Separator = separator });
         return new CsvCustomerFileReader(options, NullLogger<CsvCustomerFileReader>.Instance);

@@ -27,7 +27,10 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<FileProcessingDbContext>(options => options.UseSqlServer(connectionString));
 
-        services.AddOptionServices();
+        services.AddOptions<CsvOptions>()
+            .BindConfiguration(CsvOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
         services.AddSingleton<IFileHasher, Sha256FileHasher>();
@@ -43,18 +46,5 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IExporter, CsvExporter>();
 
         return services;
-    }
-
-    private static void AddOptionServices(this IServiceCollection services)
-    {
-        services.AddOptions<FileStorageOptions>()
-            .BindConfiguration(FileStorageOptions.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-
-        services.AddOptions<CsvOptions>()
-            .BindConfiguration(CsvOptions.SectionName)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
     }
 }

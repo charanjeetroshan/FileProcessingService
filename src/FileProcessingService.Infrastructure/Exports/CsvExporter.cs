@@ -3,11 +3,12 @@ using CsvHelper.Configuration;
 using FileProcessingService.Application.Exports;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Infrastructure.Csv;
+using Microsoft.Extensions.Options;
 using System.Globalization;
 
 namespace FileProcessingService.Infrastructure.Exports;
 
-public class CsvExporter : IExporter
+public class CsvExporter(IOptions<CsvOptions> options) : IExporter
 {
     public EExportFormat Format => EExportFormat.Csv;
 
@@ -19,7 +20,8 @@ public class CsvExporter : IExporter
 
         await using var writer = new StreamWriter(filePath);
 
-        using var csvWriter = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
+        var configuration = new CsvConfiguration(CultureInfo.InvariantCulture) { Delimiter = options.Value.Separator };
+        using var csvWriter = new CsvWriter(writer, configuration);
         csvWriter.Context.RegisterClassMap<CustomerExportRowMap>();
 
         csvWriter.WriteHeader<CustomerExportRow>();

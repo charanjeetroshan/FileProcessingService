@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace FileProcessingService.Infrastructure.FileStorage;
+namespace FileProcessingService.Application.Configuration;
 
 public class FileStorageOptions
 {

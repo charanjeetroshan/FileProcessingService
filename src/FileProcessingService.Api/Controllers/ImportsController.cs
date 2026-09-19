@@ -1,11 +1,7 @@
-using FileProcessingService.Application.Abstractions;
 using FileProcessingService.Application.Contracts;
 using FileProcessingService.Application.Imports;
-using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
-using FileProcessingService.Infrastructure.FileStorage;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace FileProcessingService.Api.Controllers;
 
@@ -13,12 +9,9 @@ namespace FileProcessingService.Api.Controllers;
 [Route("api/imports")]
 [Produces("application/json")]
 public class ImportsController(
-    IFileStorageService fileStorageService,
-    IFileHasher fileHasher,
+    IImportUploadService importUploadService,
     IImportJobRepository importJobRepository,
-    IOptions<FileStorageOptions> fileStorageOptions,
-    IImportErrorRepository importErrorRepository,
-    ILogger<ImportsController> logger) : ControllerBase
+    IImportErrorRepository importErrorRepository) : ControllerBase
 {
     private const int MaxPageSize = 100;
     private const int MaxUploadSizeInBytes = 1000 * 1024 * 1024; // Just an example limit of 1GB, the validation happens in the validator class.
@@ -30,43 +23,15 @@ public class ImportsController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ImportJobResponse>> Upload([FromForm] ImportJobRequest request, CancellationToken cancellationToken)
     {
-        IFormFile file = request.File;
+        var result = await importUploadService.UploadAsync(request.File, cancellationToken);
+        var response = result.Job.ToResponse();
 
-        string fileHash;
-        await using (var hashStream = file.OpenReadStream())
+        if (result.IsDuplicate)
         {
-            fileHash = await fileHasher.ComputeHashAsync(hashStream, cancellationToken);
+            return Conflict(response);
         }
 
-        var existingJob = await importJobRepository.GetByFileHashAsync(fileHash, cancellationToken);
-        if (existingJob is not null)
-        {
-            logger.LogInformation(
-                "Rejected duplicate upload of file {OriginalFileName} matching existing job {ImportJobId} with hash {FileHash}",
-                file.FileName, existingJob.Id, fileHash);
-
-            return Conflict(ToResponse(existingJob));
-        }
-
-        await using var stream = file.OpenReadStream();
-        var uploadDirectory = fileStorageOptions.Value.UploadDirectoryPath;
-        logger.LogDebug("Root upload directory: {UploadDirectory}", uploadDirectory);
-        var storedFileName = await fileStorageService.SaveAsync(file.FileName, uploadDirectory, stream, cancellationToken);
-
-        var job = new ImportJob
-        {
-            OriginalFileName = file.FileName,
-            StoredFileName = storedFileName,
-            FileHash = fileHash,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        await importJobRepository.AddAsync(job, cancellationToken);
-
-        logger.LogInformation("Created import job {ImportJobId} for uploaded file {OriginalFileName}", job.Id, job.OriginalFileName);
-
-        var response = ToResponse(job);
-        return CreatedAtAction(nameof(GetById), new { id = job.Id }, response);
+        return CreatedAtAction(nameof(GetById), new { id = result.Job.Id }, response);
     }
 
     [HttpGet]
@@ -88,7 +53,7 @@ public class ImportsController(
 
         var response = new PagedResult<ImportJobResponse>
         {
-            Items = items.Select(ToResponse).ToList(),
+            Items = items.Select(job => job.ToResponse()).ToList(),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -109,7 +74,7 @@ public class ImportsController(
             return NotFound();
         }
 
-        return Ok(ToResponse(job));
+        return Ok(job.ToResponse());
     }
 
     [HttpGet("{id:guid}/errors")]
@@ -137,7 +102,7 @@ public class ImportsController(
 
         var response = new PagedResult<ImportErrorResponse>
         {
-            Items = items.Select(ToResponse).ToList(),
+            Items = items.Select(error => error.ToResponse()).ToList(),
             Page = page,
             PageSize = pageSize,
             TotalCount = totalCount
@@ -145,34 +110,4 @@ public class ImportsController(
 
         return Ok(response);
     }
-
-    private static ImportJobResponse ToResponse(ImportJob job)
-    {
-        return new ImportJobResponse
-        {
-            Id = job.Id,
-            OriginalFileName = job.OriginalFileName,
-            Status = job.Status.ToString(),
-            TotalRows = job.TotalRows,
-            ProcessedRows = job.ProcessedRows,
-            SuccessfulRows = job.SuccessfulRows,
-            FailedRows = job.FailedRows,
-            PercentageComplete = job.TotalRows == 0 ? 0 : Math.Round(job.ProcessedRows / (double)job.TotalRows * 100, 2),
-            CreatedAt = job.CreatedAt,
-            StartedAt = job.StartedAt,
-            CompletedAt = job.CompletedAt,
-            ProcessingDuration = job.StartedAt is null || job.CompletedAt is null ? null : job.CompletedAt - job.StartedAt,
-            FailureReason = job.FailureReason
-        };
-    }
-
-    private static ImportErrorResponse ToResponse(ImportError error) => new()
-    {
-        Id = error.Id,
-        RowNumber = error.RowNumber,
-        Field = error.Field,
-        ErrorCode = error.ErrorCode,
-        ErrorMessage = error.ErrorMessage,
-        RawValue = error.RawValue
-    };
 }

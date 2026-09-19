@@ -19,9 +19,9 @@ public class CsvCustomerFileReaderTests
     [Test]
     public async Task ReadAsync_WithValidCsv_ReturnsMappedRowsWithRowNumbers()
     {
-        var csv = "FirstName,LastName,Email,DateOfBirth,Country\n" +
-                  "Jane,Doe,jane.doe@example.com,1990-01-01,US\n" +
-                  "John,Smith,john.smith@example.com,1985-05-05,UK\n";
+        var csv = "FirstName;LastName;Email;DateOfBirth;Country\n" +
+                  "Jane;Doe;jane.doe@example.com;1990-01-01;US\n" +
+                  "John;Smith;john.smith@example.com;1985-05-05;UK\n";
 
         var reader = CreateReader();
         using var stream = ToStream(csv);
@@ -42,7 +42,7 @@ public class CsvCustomerFileReaderTests
     [Test]
     public async Task ReadAsync_WithOnlyHeader_ReturnsNoRows()
     {
-        var csv = "FirstName,LastName,Email,DateOfBirth,Country\n";
+        var csv = "FirstName;LastName;Email;DateOfBirth;Country\n";
 
         var reader = CreateReader();
         using var stream = ToStream(csv);
@@ -78,8 +78,8 @@ public class CsvCustomerFileReaderTests
     [Test]
     public void ReadAsync_WhenCancelled_ThrowsOperationCanceledException()
     {
-        var csv = "FirstName,LastName,Email,DateOfBirth,Country\n" +
-                  "Jane,Doe,jane.doe@example.com,1990-01-01,US\n";
+        var csv = "FirstName;LastName;Email;DateOfBirth;Country\n" +
+                  "Jane;Doe;jane.doe@example.com;1990-01-01;US\n";
 
         var reader = CreateReader();
         using var stream = ToStream(csv);

@@ -11,6 +11,7 @@ namespace FileProcessingService.Api.Controllers;
 
 [ApiController]
 [Route("api/imports")]
+[Produces("application/json")]
 public class ImportsController(
     IFileStorageService fileStorageService,
     IFileHasher fileHasher,
@@ -20,9 +21,13 @@ public class ImportsController(
     ILogger<ImportsController> logger) : ControllerBase
 {
     private const int MaxPageSize = 100;
+    private const int MaxUploadSizeInBytes = 1000 * 1024 * 1024; // Just an example limit of 1GB, the validation happens in the validator class.
 
     [HttpPost]
-    [RequestSizeLimit(1000 * 1024 * 1024)] // Just an example limit of 1GB, the validation happens in the validator class.
+    [RequestSizeLimit(MaxUploadSizeInBytes)]
+    [ProducesResponseType(typeof(ImportJobResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ImportJobResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ImportJobResponse>> Upload([FromForm] ImportJobRequest request, CancellationToken cancellationToken)
     {
         IFormFile file = request.File;
@@ -65,6 +70,7 @@ public class ImportsController(
     }
 
     [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<ImportJobResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<ImportJobResponse>>> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -92,6 +98,8 @@ public class ImportsController(
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ImportJobResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ImportJobResponse>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var job = await importJobRepository.GetByIdAsync(id, cancellationToken);
@@ -105,6 +113,8 @@ public class ImportsController(
     }
 
     [HttpGet("{id:guid}/errors")]
+    [ProducesResponseType(typeof(PagedResult<ImportErrorResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PagedResult<ImportErrorResponse>>> GetErrors(
         Guid id,
         [FromQuery] int page = 1,
@@ -138,8 +148,6 @@ public class ImportsController(
 
     private static ImportJobResponse ToResponse(ImportJob job)
     {
-        var completionTime = job.CompletedAt ?? (job.StartedAt is not null ? DateTimeOffset.UtcNow : null);
-
         return new ImportJobResponse
         {
             Id = job.Id,
@@ -153,7 +161,7 @@ public class ImportsController(
             CreatedAt = job.CreatedAt,
             StartedAt = job.StartedAt,
             CompletedAt = job.CompletedAt,
-            ProcessingDuration = job.StartedAt is null ? null : completionTime - job.StartedAt,
+            ProcessingDuration = job.StartedAt is null || job.CompletedAt is null ? null : job.CompletedAt - job.StartedAt,
             FailureReason = job.FailureReason
         };
     }

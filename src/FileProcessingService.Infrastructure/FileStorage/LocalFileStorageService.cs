@@ -1,5 +1,4 @@
 using FileProcessingService.Application.Abstractions;
-using FileProcessingService.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace FileProcessingService.Infrastructure.FileStorage;
@@ -31,7 +30,7 @@ public class LocalFileStorageService(ILogger<LocalFileStorageService> logger) : 
         }
         else
         {
-            throw new FileProcessingException($"File or directory {filePath} does not exist");
+            throw new FileNotFoundException($"File or directory {filePath} does not exist");
         }
     }
 

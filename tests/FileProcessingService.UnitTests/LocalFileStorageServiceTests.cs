@@ -1,4 +1,3 @@
-using FileProcessingService.Domain.Exceptions;
 using FileProcessingService.Infrastructure.FileStorage;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text;
@@ -66,7 +65,7 @@ public class LocalFileStorageServiceTests
     {
         var filePath = Path.Combine(tempDirectory, "missing.txt");
 
-        Assert.Throws<FileProcessingException>(() => service.DeleteFile(filePath));
+        Assert.Throws<FileNotFoundException>(() => service.DeleteFile(filePath));
     }
 
     [Test]

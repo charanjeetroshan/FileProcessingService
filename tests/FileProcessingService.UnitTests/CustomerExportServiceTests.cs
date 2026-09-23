@@ -2,7 +2,6 @@ using FileProcessingService.Application.Configuration;
 using FileProcessingService.Application.Customers;
 using FileProcessingService.Application.Exports;
 using FileProcessingService.Domain.Entities;
-using FileProcessingService.Domain.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -80,6 +79,6 @@ public class CustomerExportServiceTests
         customerRepositoryMock.GetByImportIdAsync(importId, Arg.Any<CancellationToken>())
             .Returns(_ => ToAsyncEnumerable(customers));
 
-        Assert.ThrowsAsync<FileProcessingException>(() => service.ExportByImportIdAsync(importId, EExportFormat.Csv));
+        Assert.ThrowsAsync<InvalidOperationException>(() => service.ExportByImportIdAsync(importId, EExportFormat.Csv));
     }
 }

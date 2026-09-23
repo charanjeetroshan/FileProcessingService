@@ -1,9 +1,7 @@
 using FileProcessingService.Application.Configuration;
 using FileProcessingService.Application.Customers;
-using FileProcessingService.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Net;
 
 namespace FileProcessingService.Application.Exports;
 
@@ -24,7 +22,7 @@ public class CustomerExportService(
         }
 
         var exporter = exporters.SingleOrDefault(e => e.Format == format)
-            ?? throw new FileProcessingException(HttpStatusCode.BadRequest, $"No exporter is registered for format '{format}'.");
+            ?? throw new InvalidOperationException($"No exporter is registered for format '{format}'.");
 
         var exportDirectory = options.Value.ExportDirectoryPath;
 

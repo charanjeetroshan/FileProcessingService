@@ -3,7 +3,7 @@ using System.IO.Compression;
 
 namespace FileProcessingService.Infrastructure.FileStorage;
 
-internal sealed class Compressor : ICompressor
+internal sealed class CompressionService : ICompressionService
 {
     public async Task CompressAsync(string sourceDirectory, string destinationFilePath, CancellationToken cancellationToken)
     {

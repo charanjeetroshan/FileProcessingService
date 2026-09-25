@@ -1,6 +1,6 @@
 ﻿namespace FileProcessingService.Application.Abstractions;
 
-public interface ICompressor
+public interface ICompressionService
 {
     public Task CompressAsync(string sourceDirectory, string destinationFilePath, CancellationToken cancellationToken);
 

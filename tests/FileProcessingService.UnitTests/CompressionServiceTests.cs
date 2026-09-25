@@ -3,9 +3,9 @@ using System.IO.Compression;
 
 namespace FileProcessingService.UnitTests;
 
-public class CompressorTests
+public class CompressionServiceTests
 {
-    private readonly Compressor compressor = new();
+    private readonly CompressionService compressor = new();
     private readonly string tempDirectory = Path.Combine(Path.GetTempPath(), $"compressor-tests-{Guid.NewGuid()}");
 
     [SetUp]

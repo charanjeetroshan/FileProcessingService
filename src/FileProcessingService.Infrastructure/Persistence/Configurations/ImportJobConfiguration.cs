@@ -12,16 +12,21 @@ public class ImportJobConfiguration : IEntityTypeConfiguration<ImportJob>
 
         builder.HasKey(j => j.Id);
 
-        builder.Property(j => j.OriginalFileName)
+        builder.Property(j => j.UploadedFileName)
             .HasMaxLength(260)
             .IsRequired();
 
-        builder.Property(j => j.StoredFileName)
+        builder.Property(j => j.DataPackageGuid)
             .HasMaxLength(260)
             .IsRequired();
 
-        builder.Property(j => j.FileHash)
+        builder.Property(j => j.CompositeHash)
+            .IsRequired()
             .HasMaxLength(128);
+
+        builder.HasIndex(j => j.CompositeHash)
+            .IsUnique()
+            .HasFilter("[Status] != 'Failed' AND [Status] != 'Cancelled'");
 
         builder.Property(j => j.Status)
             .HasConversion<string>()

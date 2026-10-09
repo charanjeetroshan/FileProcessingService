@@ -53,7 +53,7 @@ internal sealed class CompressionService : ICompressionService
 
         if (!Directory.Exists(destinationDirectory))
         {
-            throw new DirectoryNotFoundException($"Specified destination directory {destinationDirectory} was not found");
+            Directory.CreateDirectory(destinationDirectory);
         }
 
         string stagingDirectory = Path.Combine(Path.GetTempPath(), $"decompress-staging-{Guid.NewGuid()}");

@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using CsvHelper;
 using CsvHelper.Configuration;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

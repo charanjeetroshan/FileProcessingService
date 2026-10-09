@@ -3,7 +3,8 @@ namespace FileProcessingService.Application.Contracts;
 public class ImportJobResponse
 {
     public Guid Id { get; init; }
-    public string OriginalFileName { get; init; } = string.Empty;
+    public string UploadedFileName { get; init; } = string.Empty;
+    public string DataPackageGuid { get; init; } = string.Empty;
     public string Status { get; init; } = string.Empty;
     public long TotalRows { get; init; }
     public long ProcessedRows { get; init; }

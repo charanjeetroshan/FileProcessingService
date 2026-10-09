@@ -3,6 +3,7 @@ using FileProcessingService.Application.Cleanup;
 using FileProcessingService.Application.Customers;
 using FileProcessingService.Application.Exports;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Application.Validation.Validators;
 using FileProcessingService.Infrastructure.Cleanup;
 using FileProcessingService.Infrastructure.Csv;
@@ -32,18 +33,22 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddSingleton<IValidator<CustomerImportRow>, CustomerImportRowValidator>();
+
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
         services.AddSingleton<IFileHasher, Sha256FileHasher>();
+        services.AddSingleton<ICompressionService, CompressionService>();
+        services.AddSingleton<ICsvCustomerFileReader, CsvCustomerFileReader>();
 
-        services.AddScoped<ICsvCustomerFileReader, CsvCustomerFileReader>();
+        services.AddSingleton<IExporter, NdJsonExporter>();
+        services.AddSingleton<IExporter, CsvExporter>();
+
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<IImportJobRepository, ImportJobRepository>();
         services.AddScoped<IImportErrorRepository, ImportErrorRepository>();
-        services.AddScoped<IImportJobProcessor, ImportJobProcessor>();
         services.AddScoped<ICleanupJobRepository, CleanupJobRepository>();
-        services.AddScoped<IValidator<CustomerImportRow>, CustomerImportRowValidator>();
-        services.AddScoped<IExporter, NdJsonExporter>();
-        services.AddScoped<IExporter, CsvExporter>();
+
+        services.AddScoped<IImportJobProcessor, ImportJobProcessor>();
 
         return services;
     }

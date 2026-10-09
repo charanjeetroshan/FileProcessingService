@@ -1,5 +1,10 @@
 using FileProcessingService.Application.Contracts;
 using FileProcessingService.Application.Validation;
+using FileProcessingService.Application.Imports.Abstractions;
+using FileProcessingService.Domain.Constants;
+using FileProcessingService.Infrastructure.Persistence;
+using Microsoft.Extensions.DependencyInjection;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -29,26 +34,44 @@ public class ImportsControllerTests
     }
 
     private static MultipartFormDataContent BuildUploadContent(string fileName, string csvContent)
+        => BuildArchiveContent(fileName, (FileSystemConstants.CustomerFileName, csvContent));
+
+    private static MultipartFormDataContent BuildArchiveContent(string fileName, params (string Name, string Content)[] files)
     {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var file in files)
+            {
+                using var writer = new StreamWriter(archive.CreateEntry(file.Name).Open(), new UTF8Encoding(false));
+                writer.Write(file.Content);
+            }
+        }
         var form = new MultipartFormDataContent();
-        var fileContent = new ByteArrayContent(Encoding.UTF8.GetBytes(csvContent));
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
+        var fileContent = new ByteArrayContent(stream.ToArray());
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
         form.Add(fileContent, "File", fileName);
         return form;
     }
 
     [Test]
-    public async Task Upload_WithValidCsvFile_ReturnsCreatedWithJobDetails()
+    public async Task Upload_WithValidArchive_ReturnsCreatedWithJobDetails()
     {
-        using var content = BuildUploadContent("customers.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var content = BuildUploadContent("customers.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
 
         var response = await client.PostAsync("/api/imports", content);
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
         var job = await response.Content.ReadFromJsonAsync<ImportJobResponse>();
         Assert.That(job, Is.Not.Null);
-        Assert.That(job!.OriginalFileName, Is.EqualTo("customers.csv"));
+        Assert.That(job!.UploadedFileName, Is.EqualTo("customers.zip"));
         Assert.That(job.Status, Is.EqualTo("Pending"));
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FileProcessingDbContext>();
+        var stored = await db.ImportJobs.FindAsync(job.Id);
+        var packageDirectory = Path.Combine(factory.UploadDirectoryPath, stored!.DataPackageGuid);
+        Assert.That(File.Exists(Path.Combine(packageDirectory, "data", "customers.csv")), Is.True);
+        Assert.That(File.Exists(Path.Combine(packageDirectory, "archive", "customers.zip")), Is.True);
     }
 
     [Test]
@@ -79,20 +102,25 @@ public class ImportsControllerTests
     {
         var csvContent = "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n";
 
-        using var firstContent = BuildUploadContent("customers.csv", csvContent);
+        using var firstContent = BuildUploadContent("customers.zip", csvContent);
         var firstResponse = await client.PostAsync("/api/imports", firstContent);
         Assert.That(firstResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
 
-        using var secondContent = BuildUploadContent("customers-again.csv", csvContent);
+        using var secondContent = BuildArchiveContent("customers-again.zip", ("notes.txt", "ignored metadata"), ("CUSTOMERS.CSV", csvContent));
         var secondResponse = await client.PostAsync("/api/imports", secondContent);
 
         Assert.That(secondResponse.StatusCode, Is.EqualTo(HttpStatusCode.Conflict));
+        var first = await firstResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
+        var duplicate = await secondResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
+        Assert.That(duplicate!.Id, Is.EqualTo(first!.Id));
+        Assert.That(Directory.GetDirectories(factory.UploadDirectoryPath), Has.Length.EqualTo(1));
+        Assert.That(Directory.GetFiles(factory.UploadDirectoryPath), Is.Empty);
     }
 
     [Test]
     public async Task GetById_WithExistingJob_ReturnsOkWithJobDetails()
     {
-        using var content = BuildUploadContent("customers.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var content = BuildUploadContent("customers.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
         var uploadResponse = await client.PostAsync("/api/imports", content);
         var created = await uploadResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
 
@@ -114,11 +142,11 @@ public class ImportsControllerTests
     [Test]
     public async Task GetAll_ReturnsUploadedJobsNewestFirst()
     {
-        using var firstContent = BuildUploadContent("first.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var firstContent = BuildUploadContent("first.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
         var firstResponse = await client.PostAsync("/api/imports", firstContent);
         var first = await firstResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
 
-        using var secondContent = BuildUploadContent("second.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJohn,Doe,john@example.com,1990-01-01,US\n");
+        using var secondContent = BuildUploadContent("second.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJohn,Doe,john@example.com,1990-01-01,US\n");
         var secondResponse = await client.PostAsync("/api/imports", secondContent);
         var second = await secondResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
 
@@ -135,10 +163,10 @@ public class ImportsControllerTests
     [Test]
     public async Task GetAll_WithFilenameFilter_ReturnsOnlyMatchingJobs()
     {
-        using var januaryContent = BuildUploadContent("customers-january.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var januaryContent = BuildUploadContent("customers-january.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
         await client.PostAsync("/api/imports", januaryContent);
 
-        using var februaryContent = BuildUploadContent("customers-february.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJohn,Doe,john@example.com,1990-01-01,US\n");
+        using var februaryContent = BuildUploadContent("customers-february.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJohn,Doe,john@example.com,1990-01-01,US\n");
         await client.PostAsync("/api/imports", februaryContent);
 
         var response = await client.GetAsync("/api/imports?filename=january");
@@ -146,13 +174,13 @@ public class ImportsControllerTests
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var result = await response.Content.ReadFromJsonAsync<PagedResult<ImportJobResponse>>();
         Assert.That(result!.TotalCount, Is.EqualTo(1));
-        Assert.That(result.Items[0].OriginalFileName, Is.EqualTo("customers-january.csv"));
+        Assert.That(result.Items[0].UploadedFileName, Is.EqualTo("customers-january.zip"));
     }
 
     [Test]
     public async Task GetAll_WithStatusFilter_ReturnsOnlyMatchingJobs()
     {
-        using var content = BuildUploadContent("customers.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var content = BuildUploadContent("customers.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
         await client.PostAsync("/api/imports", content);
 
         var response = await client.GetAsync("/api/imports?status=Completed");
@@ -167,7 +195,7 @@ public class ImportsControllerTests
     {
         for (var i = 0; i < 3; i++)
         {
-            using var content = BuildUploadContent($"customers-{i}.csv", $"FirstName,LastName,Email,DateOfBirth,Country\nJane{i},Doe,jane{i}@example.com,1990-01-01,US\n");
+            using var content = BuildUploadContent($"customers-{i}.zip", $"FirstName,LastName,Email,DateOfBirth,Country\nJane{i},Doe,jane{i}@example.com,1990-01-01,US\n");
             await client.PostAsync("/api/imports", content);
         }
 
@@ -191,27 +219,27 @@ public class ImportsControllerTests
     [Test]
     public async Task GetErrors_WithInvalidRow_ReturnsPagedValidationErrors()
     {
-        // Missing required Email field on the single data row to force a validation error to be recorded.
-        using var content = BuildUploadContent("customers.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,,1990-01-01,US\n");
+        using var content = BuildUploadContent("customers.zip", "FirstName;LastName;Email;DateOfBirth;Country\nJane;Doe;;1990-01-01;US\n");
         var uploadResponse = await client.PostAsync("/api/imports", content);
+        Assert.That(uploadResponse.StatusCode, Is.EqualTo(HttpStatusCode.Created));
         var created = await uploadResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
-
-        // Processing happens on the Worker; in tests only the Api is hosted, so directly poll is not
-        // meaningful. Since ImportJobProcessor is not run by the Api, no errors are persisted here.
-        // This test focuses purely on endpoint routing/response shape for a job with no errors yet.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FileProcessingDbContext>();
+        var job = await db.ImportJobs.FindAsync(created!.Id);
+        await scope.ServiceProvider.GetRequiredService<IImportJobProcessor>().ProcessJob(job!, CancellationToken.None);
         var response = await client.GetAsync($"/api/imports/{created!.Id}/errors");
 
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
         var result = await response.Content.ReadFromJsonAsync<PagedResult<ImportErrorResponse>>();
         Assert.That(result, Is.Not.Null);
-        Assert.That(result!.TotalCount, Is.EqualTo(0));
-        Assert.That(result.Items, Is.Empty);
+        Assert.That(result!.TotalCount, Is.GreaterThan(0));
+        Assert.That(result.Items.Any(error => error.Field == "Email"), Is.True);
     }
 
     [Test]
     public async Task GetById_ForNewlyUploadedJob_ReturnsPendingStatistics()
     {
-        using var content = BuildUploadContent("customers.csv", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
+        using var content = BuildUploadContent("customers.zip", "FirstName,LastName,Email,DateOfBirth,Country\nJane,Doe,jane@example.com,1990-01-01,US\n");
         var uploadResponse = await client.PostAsync("/api/imports", content);
         var created = await uploadResponse.Content.ReadFromJsonAsync<ImportJobResponse>();
 
@@ -228,5 +256,68 @@ public class ImportsControllerTests
         Assert.That(job.StartedAt, Is.Null);
         Assert.That(job.CompletedAt, Is.Null);
         Assert.That(job.ProcessingDuration, Is.Null);
+    }
+
+    [Test]
+    public async Task Upload_WithDirectCsv_ReturnsBadRequest()
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("FirstName;LastName;Email;DateOfBirth;Country\n"), "File", "customers.csv");
+
+        var response = await client.PostAsync("/api/imports", content);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(Directory.GetFileSystemEntries(factory.UploadDirectoryPath), Is.Empty);
+    }
+
+    [TestCase("empty")]
+    [TestCase("unsupported")]
+    [TestCase("nested")]
+    [TestCase("empty-customers")]
+    [TestCase("too-many")]
+    public async Task Upload_WithInvalidArchiveContents_ReturnsBadRequestAndCleansPackage(string scenario)
+    {
+        (string Name, string Content)[] files = scenario switch
+        {
+            "empty" => [],
+            "unsupported" => [("orders.csv", "orders")],
+            "nested" => [("nested/customers.csv", "customers")],
+            "empty-customers" => [("customers.csv", string.Empty)],
+            _ => [("customers.csv", "customers"), ("notes.txt", "notes"), ("extra.txt", "extra")]
+        };
+        using var content = BuildArchiveContent("package.zip", files);
+
+        var response = await client.PostAsync("/api/imports", content);
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        Assert.That(Directory.GetFileSystemEntries(factory.UploadDirectoryPath), Is.Empty);
+        using var scope = factory.Services.CreateScope();
+        Assert.That(scope.ServiceProvider.GetRequiredService<FileProcessingDbContext>().ImportJobs.Count(), Is.Zero);
+    }
+
+    [Test]
+    public async Task Upload_ThenProcess_ImportsOnlyCustomersFromArchive()
+    {
+        using var content = BuildArchiveContent("package.zip",
+            ("customers.csv", "FirstName;LastName;Email;DateOfBirth;Country\nJane;Doe;jane@example.com;1990-01-01;US\n"),
+            ("notes.txt", "not customer data"));
+        var response = await client.PostAsync("/api/imports", content);
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.Created));
+        var created = await response.Content.ReadFromJsonAsync<ImportJobResponse>();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FileProcessingDbContext>();
+            var job = await db.ImportJobs.FindAsync(created!.Id);
+            await scope.ServiceProvider.GetRequiredService<IImportJobProcessor>().ProcessJob(job!, CancellationToken.None);
+            Assert.That(db.Customers.Single().Email, Is.EqualTo("jane@example.com"));
+            Assert.That(db.ImportErrors.Count(), Is.Zero);
+        }
+
+        var result = await client.GetFromJsonAsync<ImportJobResponse>($"/api/imports/{created!.Id}");
+
+        Assert.That(result!.Status, Is.EqualTo("Completed"));
+        Assert.That(result.TotalRows, Is.EqualTo(1));
+        Assert.That(result.SuccessfulRows, Is.EqualTo(1));
+        Assert.That(result.FailedRows, Is.Zero);
     }
 }

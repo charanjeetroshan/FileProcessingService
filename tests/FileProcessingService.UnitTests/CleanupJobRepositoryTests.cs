@@ -34,6 +34,19 @@ public class CleanupJobRepositoryTests
     };
 
     [Test]
+    public async Task AddAsync_PersistsJobWithoutExplicitSave()
+    {
+        var job = CreateJob("C:/temp/package");
+
+        await repository.AddAsync(job);
+        dbContext.ChangeTracker.Clear();
+
+        var stored = await dbContext.CleanupJobs.FindAsync(job.Id);
+        Assert.That(stored, Is.Not.Null);
+        Assert.That(stored!.FilePath, Is.EqualTo(job.FilePath));
+    }
+
+    [Test]
     public async Task AddJobsAsync_PersistsJobs()
     {
         var job = CreateJob("C:/temp/file.csv");

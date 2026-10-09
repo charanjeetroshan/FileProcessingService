@@ -1,5 +1,5 @@
 using FileProcessingService.Application.Contracts;
-using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,7 +9,7 @@ namespace FileProcessingService.Api.Controllers;
 [Route("api/imports")]
 [Produces("application/json")]
 public class ImportsController(
-    IImportUploadService importUploadService,
+    IImportJobEnqueuerService importUploadService,
     IImportJobRepository importJobRepository,
     IImportErrorRepository importErrorRepository) : ControllerBase
 {
@@ -23,7 +23,7 @@ public class ImportsController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ImportJobResponse>> Upload([FromForm] ImportJobRequest request, CancellationToken cancellationToken)
     {
-        var result = await importUploadService.UploadAsync(request.File, cancellationToken);
+        var result = await importUploadService.EnqueueAsync(request.File, cancellationToken);
         var response = result.Job.ToResponse();
 
         if (result.IsDuplicate)

@@ -9,7 +9,8 @@ public static class ImportMappingExtensions
         return new ImportJobResponse
         {
             Id = job.Id,
-            OriginalFileName = job.OriginalFileName,
+            UploadedFileName = job.UploadedFileName,
+            DataPackageGuid = job.DataPackageGuid,
             Status = job.Status.ToString(),
             TotalRows = job.TotalRows,
             ProcessedRows = job.ProcessedRows,

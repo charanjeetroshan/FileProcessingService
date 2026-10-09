@@ -1,4 +1,4 @@
-using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
 using FileProcessingService.Worker;
@@ -34,7 +34,7 @@ public class ImportWorkerTests
     [Test]
     public async Task ExecuteAsync_ClaimsAndProcessesAvailableJob()
     {
-        var job = new ImportJob { OriginalFileName = "file.csv", StoredFileName = "stored.csv" };
+        var job = new ImportJob { UploadedFileName = "package.zip", DataPackageGuid = Guid.NewGuid().ToString() };
         var processedSignal = new TaskCompletionSource();
 
         var repositoryMock = Substitute.For<IImportJobRepository>();
@@ -88,7 +88,7 @@ public class ImportWorkerTests
     [Test]
     public async Task ExecuteAsync_WhenProcessorThrows_DoesNotCrashWorker()
     {
-        var job = new ImportJob { OriginalFileName = "file.csv", StoredFileName = "stored.csv" };
+        var job = new ImportJob { UploadedFileName = "package.zip", DataPackageGuid = Guid.NewGuid().ToString() };
         var attemptedSignal = new TaskCompletionSource();
 
         var repositoryMock = Substitute.For<IImportJobRepository>();

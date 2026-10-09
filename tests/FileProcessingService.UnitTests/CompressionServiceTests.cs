@@ -73,18 +73,19 @@ public class CompressionServiceTests
     }
 
     [Test]
-    public void Decompress_ThrowsDirectoryNotFoundException_WhenDestinationDirectoryDoesNotExist()
+    public async Task Decompress_CreatesDestinationDirectory_WhenItDoesNotExist()
     {
         string sourceDir = Path.Combine(tempDirectory, "source");
         Directory.CreateDirectory(sourceDir);
-
+        await File.WriteAllTextAsync(Path.Combine(sourceDir, "customers.csv"), "customer data");
         string destFileName = sourceDir + ".zip";
         ZipFile.CreateFromDirectory(sourceDir, destFileName);
 
         string missingDestination = Path.Combine(tempDirectory, "missing-destination");
 
-        Assert.ThrowsAsync<DirectoryNotFoundException>(
-            () => compressor.DecompressAsync(destFileName, missingDestination, CancellationToken.None));
+        await compressor.DecompressAsync(destFileName, missingDestination, CancellationToken.None);
+
+        Assert.That(await File.ReadAllTextAsync(Path.Combine(missingDestination, "customers.csv")), Is.EqualTo("customer data"));
     }
 
     [Test]
@@ -174,6 +175,42 @@ public class CompressionServiceTests
 
         using ZipArchive archive = ZipFile.OpenRead(destFileName);
         Assert.That(archive.Entries, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task Decompress_PreservesNestedPathsAndAcceptsUppercaseZipExtension()
+    {
+        var source = Path.Combine(tempDirectory, "source");
+        Directory.CreateDirectory(Path.Combine(source, "nested"));
+        await File.WriteAllTextAsync(Path.Combine(source, "customers.csv"), "customers");
+        await File.WriteAllTextAsync(Path.Combine(source, "nested", "notes.txt"), "notes");
+        var archivePath = Path.Combine(tempDirectory, "package.ZIP");
+        ZipFile.CreateFromDirectory(source, archivePath);
+        var destination = Path.Combine(tempDirectory, "package", "data");
+
+        await compressor.DecompressAsync(archivePath, destination, CancellationToken.None);
+
+        Assert.That(await File.ReadAllTextAsync(Path.Combine(destination, "customers.csv")), Is.EqualTo("customers"));
+        Assert.That(await File.ReadAllTextAsync(Path.Combine(destination, "nested", "notes.txt")), Is.EqualTo("notes"));
+    }
+
+    [Test]
+    public void Decompress_RejectsPathTraversalEntries()
+    {
+        var archivePath = Path.Combine(tempDirectory, "unsafe.zip");
+        var escapedName = $"escaped-{Guid.NewGuid()}.txt";
+        using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+        using (var writer = new StreamWriter(archive.CreateEntry($"../{escapedName}").Open()))
+        {
+            writer.Write("outside destination");
+        }
+        var destination = Path.Combine(tempDirectory, "data");
+
+        Assert.ThrowsAsync<IOException>(() => compressor.DecompressAsync(archivePath, destination, CancellationToken.None));
+
+        Assert.That(Directory.GetFiles(destination, "*", SearchOption.AllDirectories), Is.Empty);
+        Assert.That(File.Exists(Path.Combine(Path.GetTempPath(), escapedName)), Is.False);
+        Assert.That(File.Exists(Path.Combine(tempDirectory, escapedName)), Is.False);
     }
 
     private static async Task CreateFiles(string destinationDirectoryPath, short count = 5)

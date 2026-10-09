@@ -1,4 +1,4 @@
-namespace FileProcessingService.Application.Imports;
+namespace FileProcessingService.Application.Imports.Abstractions;
 
 public interface ICsvCustomerFileReader
 {

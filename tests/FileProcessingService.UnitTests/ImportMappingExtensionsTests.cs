@@ -15,7 +15,7 @@ public class ImportMappingExtensionsTests
 
         var job = new ImportJob
         {
-            OriginalFileName = "customers.csv",
+            UploadedFileName = "customers.csv",
             Status = ImportStatus.Completed,
             TotalRows = 100,
             ProcessedRows = 100,
@@ -30,7 +30,7 @@ public class ImportMappingExtensionsTests
         var response = job.ToResponse();
 
         Assert.That(response.Id, Is.EqualTo(job.Id));
-        Assert.That(response.OriginalFileName, Is.EqualTo("customers.csv"));
+        Assert.That(response.UploadedFileName, Is.EqualTo("customers.csv"));
         Assert.That(response.Status, Is.EqualTo(nameof(ImportStatus.Completed)));
         Assert.That(response.TotalRows, Is.EqualTo(100));
         Assert.That(response.ProcessedRows, Is.EqualTo(100));
@@ -47,7 +47,7 @@ public class ImportMappingExtensionsTests
     [Test]
     public void ToResponse_ImportJob_WithZeroTotalRows_PercentageIsZero()
     {
-        var job = new ImportJob { OriginalFileName = "empty.csv", TotalRows = 0, ProcessedRows = 0 };
+        var job = new ImportJob { UploadedFileName = "empty.csv", TotalRows = 0, ProcessedRows = 0 };
 
         var response = job.ToResponse();
 
@@ -57,7 +57,7 @@ public class ImportMappingExtensionsTests
     [Test]
     public void ToResponse_ImportJob_WithoutStartedOrCompletedAt_ProcessingDurationIsNull()
     {
-        var job = new ImportJob { OriginalFileName = "pending.csv", StartedAt = null, CompletedAt = null };
+        var job = new ImportJob { UploadedFileName = "pending.csv", StartedAt = null, CompletedAt = null };
 
         var response = job.ToResponse();
 
@@ -67,7 +67,7 @@ public class ImportMappingExtensionsTests
     [Test]
     public void ToResponse_ImportJob_WithStartedButNotCompleted_ProcessingDurationIsNull()
     {
-        var job = new ImportJob { OriginalFileName = "in-progress.csv", StartedAt = DateTimeOffset.UtcNow, CompletedAt = null };
+        var job = new ImportJob { UploadedFileName = "in-progress.csv", StartedAt = DateTimeOffset.UtcNow, CompletedAt = null };
 
         var response = job.ToResponse();
 

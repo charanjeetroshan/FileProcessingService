@@ -1,6 +1,7 @@
 ﻿using FileProcessingService.Application.Configuration;
 using FileProcessingService.Application.Exports;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Application.Validation;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
@@ -29,7 +30,7 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services.AddScoped<IImportUploadService, ImportUploadService>();
+        services.AddScoped<IImportJobEnqueuerService, ImportJobEnqueuerService>();
         services.AddScoped<ICustomerExportService, CustomerExportService>();
 
         return services;

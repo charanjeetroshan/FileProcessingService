@@ -26,14 +26,14 @@ public class LocalFileStorageServiceTests
     }
 
     [Test]
-    public async Task SaveAsync_WritesFileWithGuidPrefixedName()
+    public async Task SaveAsync_WritesRequestedFileAndReturnsFullPath()
     {
         using var content = new MemoryStream(Encoding.UTF8.GetBytes("row1,row2"));
 
         var storedFileName = await service.SaveAsync("data.csv", tempDirectory, content, CancellationToken.None);
 
-        Assert.That(storedFileName, Does.EndWith("_data.csv"));
-        Assert.That(File.Exists(Path.Combine(tempDirectory, storedFileName)), Is.True);
+        Assert.That(storedFileName, Is.EqualTo(Path.Combine(tempDirectory, "data.csv")));
+        Assert.That(File.Exists(storedFileName), Is.True);
     }
 
     [Test]
@@ -82,10 +82,84 @@ public class LocalFileStorageServiceTests
     }
 
     [Test]
-    public void GetFilesAt_WithMissingDirectory_ReturnsEmptyArray()
+    public void GetFilesAt_WithMissingDirectory_ThrowsDirectoryNotFoundException()
     {
-        var files = service.GetFilesAt(tempDirectory);
+        Assert.Throws<DirectoryNotFoundException>(() => service.GetFilesAt(tempDirectory));
+    }
 
-        Assert.That(files, Is.Empty);
+    [Test]
+    public void GetFilesAt_ReturnsOnlyTopLevelFiles()
+    {
+        var nested = Path.Combine(tempDirectory, "nested");
+        Directory.CreateDirectory(nested);
+        var customerPath = Path.Combine(tempDirectory, "customers.csv");
+        File.WriteAllText(customerPath, "customers");
+        File.WriteAllText(Path.Combine(nested, "notes.txt"), "notes");
+
+        Assert.That(service.GetFilesAt(tempDirectory), Is.EqualTo(new[] { customerPath }));
+    }
+
+    [Test]
+    public void GetDirectorySize_IncludesNestedFiles()
+    {
+        var nested = Path.Combine(tempDirectory, "nested");
+        Directory.CreateDirectory(nested);
+        File.WriteAllBytes(Path.Combine(tempDirectory, "customers.csv"), new byte[10]);
+        File.WriteAllBytes(Path.Combine(nested, "notes.txt"), new byte[20]);
+
+        Assert.That(service.GetDirectorySize(tempDirectory), Is.EqualTo(30));
+    }
+
+    [Test]
+    public void GetDirectorySize_WithEmptyDirectory_ReturnsZero()
+    {
+        Directory.CreateDirectory(tempDirectory);
+
+        Assert.That(service.GetDirectorySize(tempDirectory), Is.Zero);
+    }
+
+    [Test]
+    public void DeleteDirectory_RemovesNestedFilesAndDirectory()
+    {
+        var nested = Path.Combine(tempDirectory, "package", "data");
+        Directory.CreateDirectory(nested);
+        File.WriteAllText(Path.Combine(nested, "customers.csv"), "data");
+        Assert.That(service.DirectoryExists(tempDirectory), Is.True);
+
+        service.DeleteDirectory(tempDirectory);
+
+        Assert.That(service.DirectoryExists(tempDirectory), Is.False);
+    }
+
+    [Test]
+    public void DeleteDirectory_WithMissingDirectory_Throws()
+    {
+        Assert.Throws<DirectoryNotFoundException>(() => service.DeleteDirectory(tempDirectory));
+    }
+
+    [Test]
+    public async Task MoveFile_CreatesDestinationParentAndPreservesContent()
+    {
+        Directory.CreateDirectory(tempDirectory);
+        var source = Path.Combine(tempDirectory, "package.zip");
+        var destination = Path.Combine(tempDirectory, "package", "archive", "package.zip");
+        await File.WriteAllTextAsync(source, "archive bytes");
+
+        service.MoveFile(source, destination);
+
+        Assert.That(File.Exists(source), Is.False);
+        Assert.That(await File.ReadAllTextAsync(destination), Is.EqualTo("archive bytes"));
+    }
+
+    [Test]
+    public void MoveFile_WithMissingSource_Throws()
+    {
+        Assert.Throws<FileNotFoundException>(() => service.MoveFile(Path.Combine(tempDirectory, "missing.zip"), Path.Combine(tempDirectory, "archive", "missing.zip")));
+    }
+
+    [Test]
+    public void OpenFile_WithMissingFile_Throws()
+    {
+        Assert.Throws<FileNotFoundException>(() => service.OpenFile(Path.Combine(tempDirectory, "missing.csv")));
     }
 }

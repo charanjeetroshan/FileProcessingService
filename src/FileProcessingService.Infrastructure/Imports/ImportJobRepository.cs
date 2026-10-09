@@ -1,4 +1,4 @@
-using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
 using FileProcessingService.Infrastructure.Persistence;
@@ -17,10 +17,10 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
     public Task<ImportJob?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         => dbContext.ImportJobs.FirstOrDefaultAsync(job => job.Id == id, cancellationToken);
 
-    public Task<ImportJob?> GetByFileHashAsync(string fileHash, CancellationToken cancellationToken = default)
+    public Task<ImportJob?> GetByHashAsync(string hash, CancellationToken cancellationToken = default)
         => dbContext.ImportJobs
             .AsNoTracking()
-            .Where(job => job.FileHash == fileHash
+            .Where(job => job.CompositeHash == hash
                 && job.Status != ImportStatus.Failed
                 && job.Status != ImportStatus.Cancelled)
             .OrderByDescending(job => job.CreatedAt)
@@ -84,7 +84,7 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
 
         if (!string.IsNullOrWhiteSpace(fileName))
         {
-            query = query.Where(job => job.OriginalFileName.Contains(fileName));
+            query = query.Where(job => job.UploadedFileName.Contains(fileName));
         }
 
         if (createdFrom is not null)
@@ -106,24 +106,6 @@ public class ImportJobRepository(FileProcessingDbContext dbContext) : IImportJob
             .ToListAsync(cancellationToken);
 
         return (items, totalCount);
-    }
-
-    public async Task<ImportJob[]> GetProcessedJobsByFileNamesAsync(string[] fileNames, CancellationToken cancellationToken = default)
-    {
-        ImportStatus[] allowedStatuses = [ImportStatus.Completed, ImportStatus.Failed];
-
-        return await dbContext.ImportJobs
-            .AsNoTracking()
-            .Where(job => allowedStatuses.Contains(job.Status) && fileNames.Contains(job.StoredFileName))
-            .ToArrayAsync(cancellationToken);
-    }
-
-    public async Task<string[]> GetAllTrackedFileNamesAsync(CancellationToken cancellationToken = default)
-    {
-        return await dbContext.ImportJobs
-            .AsNoTracking()
-            .Select(job => job.StoredFileName)
-            .ToArrayAsync(cancellationToken);
     }
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken)

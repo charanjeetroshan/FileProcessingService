@@ -28,11 +28,11 @@ public class ImportJobRepositoryTests
 
     private static ImportJob CreateJob(ImportStatus status = ImportStatus.Pending, DateTimeOffset? createdAt = null, string? fileHash = null) => new()
     {
-        OriginalFileName = "file.csv",
-        StoredFileName = $"{Guid.NewGuid()}_file.csv",
+        UploadedFileName = "package.zip",
+        DataPackageGuid = Guid.NewGuid().ToString(),
         Status = status,
         CreatedAt = createdAt ?? DateTimeOffset.UtcNow,
-        FileHash = fileHash
+        CompositeHash = fileHash ?? Guid.NewGuid().ToString("N")
     };
 
     [Test]
@@ -101,46 +101,46 @@ public class ImportJobRepositoryTests
     }
 
     [Test]
-    public async Task GetByFileHashAsync_WithMatchingActiveJob_ReturnsJob()
+    public async Task GetByHashAsync_WithMatchingActiveJob_ReturnsJob()
     {
         var job = CreateJob(fileHash: "abc123");
         await repository.AddAsync(job);
 
-        var found = await repository.GetByFileHashAsync("abc123");
+        var found = await repository.GetByHashAsync("abc123");
 
         Assert.That(found, Is.Not.Null);
         Assert.That(found!.Id, Is.EqualTo(job.Id));
     }
 
     [Test]
-    public async Task GetByFileHashAsync_WithOnlyFailedMatchingJob_ReturnsNull()
+    public async Task GetByHashAsync_WithOnlyFailedMatchingJob_ReturnsNull()
     {
         var job = CreateJob(status: ImportStatus.Failed, fileHash: "abc123");
         await repository.AddAsync(job);
 
-        var found = await repository.GetByFileHashAsync("abc123");
+        var found = await repository.GetByHashAsync("abc123");
 
         Assert.That(found, Is.Null);
     }
 
     [Test]
-    public async Task GetByFileHashAsync_WithOnlyCancelledMatchingJob_ReturnsNull()
+    public async Task GetByHashAsync_WithOnlyCancelledMatchingJob_ReturnsNull()
     {
         var job = CreateJob(status: ImportStatus.Cancelled, fileHash: "abc123");
         await repository.AddAsync(job);
 
-        var found = await repository.GetByFileHashAsync("abc123");
+        var found = await repository.GetByHashAsync("abc123");
 
         Assert.That(found, Is.Null);
     }
 
     [Test]
-    public async Task GetByFileHashAsync_WithNoMatchingHash_ReturnsNull()
+    public async Task GetByHashAsync_WithNoMatchingHash_ReturnsNull()
     {
         var job = CreateJob(fileHash: "abc123");
         await repository.AddAsync(job);
 
-        var found = await repository.GetByFileHashAsync("different-hash");
+        var found = await repository.GetByHashAsync("different-hash");
 
         Assert.That(found, Is.Null);
     }
@@ -195,9 +195,9 @@ public class ImportJobRepositoryTests
     public async Task GetPagedAsync_FiltersByFileNameSubstring()
     {
         var job1 = CreateJob();
-        job1.OriginalFileName = "customers-january.csv";
+        job1.UploadedFileName = "customers-january.zip";
         var job2 = CreateJob();
-        job2.OriginalFileName = "customers-february.csv";
+        job2.UploadedFileName = "customers-february.zip";
         await repository.AddAsync(job1);
         await repository.AddAsync(job2);
 
@@ -238,59 +238,30 @@ public class ImportJobRepositoryTests
         Assert.That(items, Is.Empty);
     }
 
-    [Test]
-    public async Task GetProcessedJobsByFileNamesAsync_ReturnsOnlyCompletedMatchingJobs()
+    [TestCase(ImportStatus.Pending)]
+    [TestCase(ImportStatus.Processing)]
+    [TestCase(ImportStatus.Completed)]
+    public async Task GetByHashAsync_WithEligiblePackageStatus_ReturnsPackage(ImportStatus status)
     {
-        var completed = CreateJob(status: ImportStatus.Completed);
-        var pending = CreateJob(status: ImportStatus.Pending);
-        await repository.AddAsync(completed);
-        await repository.AddAsync(pending);
+        var job = CreateJob(status: status, fileHash: "composite-hash");
+        await repository.AddAsync(job);
 
-        var result = await repository.GetProcessedJobsByFileNamesAsync([completed.StoredFileName, pending.StoredFileName]);
+        var result = await repository.GetByHashAsync("composite-hash");
 
-        Assert.That(result, Has.Length.EqualTo(1));
-        Assert.That(result[0].Id, Is.EqualTo(completed.Id));
+        Assert.That(result!.Id, Is.EqualTo(job.Id));
     }
 
     [Test]
-    public async Task GetProcessedJobsByFileNamesAsync_WithNoMatches_ReturnsEmpty()
+    public async Task AddAsync_PersistsArchivePackageMetadata()
     {
-        var completed = CreateJob(status: ImportStatus.Completed);
-        await repository.AddAsync(completed);
+        var job = CreateJob(fileHash: "composite-hash");
+        await repository.AddAsync(job);
+        dbContext.ChangeTracker.Clear();
 
-        var result = await repository.GetProcessedJobsByFileNamesAsync(["nonexistent.csv"]);
+        var stored = await repository.GetByIdAsync(job.Id);
 
-        Assert.That(result, Is.Empty);
-    }
-
-    [Test]
-    public async Task GetAllTrackedFileNamesAsync_ReturnsFileNamesRegardlessOfStatus()
-    {
-        var pending = CreateJob(status: ImportStatus.Pending);
-        var processing = CreateJob(status: ImportStatus.Processing);
-        var completed = CreateJob(status: ImportStatus.Completed);
-        var failed = CreateJob(status: ImportStatus.Failed);
-        await repository.AddAsync(pending);
-        await repository.AddAsync(processing);
-        await repository.AddAsync(completed);
-        await repository.AddAsync(failed);
-
-        var result = await repository.GetAllTrackedFileNamesAsync();
-
-        Assert.That(result, Is.EquivalentTo(new[]
-        {
-            pending.StoredFileName,
-            processing.StoredFileName,
-            completed.StoredFileName,
-            failed.StoredFileName
-        }));
-    }
-
-    [Test]
-    public async Task GetAllTrackedFileNamesAsync_WithNoJobs_ReturnsEmpty()
-    {
-        var result = await repository.GetAllTrackedFileNamesAsync();
-
-        Assert.That(result, Is.Empty);
+        Assert.That(stored!.UploadedFileName, Is.EqualTo("package.zip"));
+        Assert.That(stored.DataPackageGuid, Is.EqualTo(job.DataPackageGuid));
+        Assert.That(stored.CompositeHash, Is.EqualTo("composite-hash"));
     }
 }

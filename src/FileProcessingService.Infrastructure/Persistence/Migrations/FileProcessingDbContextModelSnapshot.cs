@@ -142,8 +142,18 @@ namespace FileProcessingService.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("CompositeHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DataPackageGuid")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
 
                     b.Property<long>("FailedRows")
                         .HasColumnType("bigint");
@@ -151,15 +161,6 @@ namespace FileProcessingService.Infrastructure.Persistence.Migrations
                     b.Property<string>("FailureReason")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("FileHash")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasMaxLength(260)
-                        .HasColumnType("nvarchar(260)");
 
                     b.Property<long>("ProcessedRows")
                         .HasColumnType("bigint");
@@ -172,18 +173,22 @@ namespace FileProcessingService.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<string>("StoredFileName")
-                        .IsRequired()
-                        .HasMaxLength(260)
-                        .HasColumnType("nvarchar(260)");
-
                     b.Property<long>("SuccessfulRows")
                         .HasColumnType("bigint");
 
                     b.Property<long>("TotalRows")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("UploadedFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CompositeHash")
+                        .IsUnique()
+                        .HasFilter("[Status] != 'Failed' AND [Status] != 'Cancelled'");
 
                     b.ToTable("ImportJobs", (string)null);
                 });

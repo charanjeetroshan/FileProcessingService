@@ -34,10 +34,12 @@ public class CreateImportJobValidatorTests
         Assert.That(result.Errors.Any(e => e.ErrorCode == "File.Empty"), Is.True);
     }
 
-    [Test]
-    public void Validate_WithValidCsvFile_IsValid()
+    [TestCase("package.zip", 1024)]
+    [TestCase("package.ZIP", 1024)]
+    [TestCase("package.zip", 50 * 1024 * 1024)]
+    public void Validate_WithValidArchive_IsValid(string fileName, long length)
     {
-        var file = CreateFormFile("customers.csv", 1024);
+        var file = CreateFormFile(fileName, length);
         var request = new ImportJobRequest(file);
 
         var result = validator.Validate(request);
@@ -48,7 +50,7 @@ public class CreateImportJobValidatorTests
     [Test]
     public void Validate_WithFileExceedingMaxSize_IsInvalidWithTooLargeCode()
     {
-        var file = CreateFormFile("customers.csv", 51 * 1024 * 1024);
+        var file = CreateFormFile("package.zip", 50 * 1024 * 1024 + 1);
         var request = new ImportJobRequest(file);
 
         var result = validator.Validate(request);
@@ -57,10 +59,14 @@ public class CreateImportJobValidatorTests
         Assert.That(result.Errors.Any(e => e.ErrorCode == "File.TooLarge"), Is.True);
     }
 
-    [Test]
-    public void Validate_WithInvalidExtension_IsInvalidWithInvalidExtensionCode()
+    [TestCase("customers.csv")]
+    [TestCase("customers.CSV")]
+    [TestCase("package.rar")]
+    [TestCase("package.zip.txt")]
+    [TestCase("package")]
+    public void Validate_WithInvalidExtension_IsInvalidWithInvalidExtensionCode(string fileName)
     {
-        var file = CreateFormFile("customers.txt", 1024);
+        var file = CreateFormFile(fileName, 1024);
         var request = new ImportJobRequest(file);
 
         var result = validator.Validate(request);

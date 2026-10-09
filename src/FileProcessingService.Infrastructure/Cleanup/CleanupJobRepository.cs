@@ -8,6 +8,12 @@ namespace FileProcessingService.Infrastructure.Cleanup;
 
 public class CleanupJobRepository(FileProcessingDbContext db) : ICleanupJobRepository
 {
+    public async Task AddAsync(CleanupJob job, CancellationToken cancellationToken = default)
+    {
+        await db.CleanupJobs.AddAsync(job, cancellationToken);
+        await SaveChangesAsync(cancellationToken);
+    }
+
     public async Task AddJobsAsync(IEnumerable<CleanupJob> jobs, CancellationToken cancellationToken = default)
     {
         await db.CleanupJobs.AddRangeAsync(jobs, cancellationToken);

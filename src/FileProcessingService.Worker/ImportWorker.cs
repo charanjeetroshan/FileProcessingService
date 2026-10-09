@@ -1,4 +1,4 @@
-using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Enums;
 using System.Collections.Concurrent;
 
@@ -52,7 +52,7 @@ public class ImportWorker(IServiceScopeFactory scopeFactory, ILogger<ImportWorke
                 return;
             }
 
-            logger.LogInformation("Claimed pending import job {ImportJobId} ({OriginalFileName})", job.Id, job.OriginalFileName);
+            logger.LogInformation("Claimed pending import job {ImportJobId} ({UploadedFileName})", job.Id, job.UploadedFileName);
 
             var jobId = job.Id;
             var runTask = RunJobAsync(jobId, stoppingToken);

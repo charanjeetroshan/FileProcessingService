@@ -1,4 +1,4 @@
-using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;

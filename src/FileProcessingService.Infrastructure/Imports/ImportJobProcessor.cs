@@ -1,5 +1,8 @@
-﻿using FileProcessingService.Application.Configuration;
+﻿using FileProcessingService.Application.Abstractions;
+using FileProcessingService.Application.Configuration;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
+using FileProcessingService.Domain.Constants;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
 using FileProcessingService.Infrastructure.Persistence;
@@ -14,6 +17,7 @@ namespace FileProcessingService.Infrastructure.Imports;
 
 internal class ImportJobProcessor(
     IOptions<FileStorageOptions> storageOptions,
+    IFileStorageService fileStorageService,
     ICsvCustomerFileReader csvReader,
     IValidator<CustomerImportRow> csvRowValidator,
     FileProcessingDbContext db,
@@ -24,7 +28,7 @@ internal class ImportJobProcessor(
 
     public async Task ProcessJob(ImportJob job, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Starting import job {ImportJobId} for file {StoredFileName}", job.Id, job.StoredFileName);
+        logger.LogInformation("Starting import job {ImportJobId} for data package {DataPackage}", job.Id, job.DataPackageGuid);
 
         job.Status = ImportStatus.Processing;
         job.StartedAt = DateTimeOffset.UtcNow;
@@ -33,101 +37,111 @@ internal class ImportJobProcessor(
         List<Customer> customers = [];
         List<ImportError> errors = [];
 
-        var filePath = Path.Combine(storageOptions.Value.UploadDirectoryPath, job.StoredFileName);
+        string dataDirectoryPath = Path.Combine(storageOptions.Value.UploadDirectoryPath, job.DataPackageGuid, FileSystemConstants.DataDirectoryName);
+        var uploadedFilePaths = fileStorageService.GetFilesAt(dataDirectoryPath);
 
-        try
+        foreach (var filePath in uploadedFilePaths)
         {
-            await using FileStream csvStream = File.OpenRead(filePath);
-
-            await foreach (CustomerImportRow row in csvReader.ReadAsync(csvStream, cancellationToken))
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                await using FileStream csvStream = fileStorageService.OpenFile(filePath);
 
-                job.TotalRows++;
-
-                ValidationResult validationResult = await csvRowValidator.ValidateAsync(row, cancellationToken);
-
-                if (!validationResult.IsValid)
+                if (Path.GetFileName(filePath).Equals(FileSystemConstants.CustomerFileName, StringComparison.OrdinalIgnoreCase))
                 {
-                    foreach (var validationError in validationResult.Errors)
-                    {
-                        errors.Add(new ImportError
-                        {
-                            ImportJobId = job.Id,
-                            RowNumber = row.RowNumber,
-                            Field = validationError.PropertyName,
-                            ErrorCode = validationError.ErrorCode,
-                            ErrorMessage = validationError.ErrorMessage,
-                            RawValue = validationError.AttemptedValue?.ToString()
-                        });
-                    }
-
-                    job.FailedRows++;
-                    job.ProcessedRows++;
-
-                    await FlushIfNeeded(customers, errors, cancellationToken);
-                    continue;
+                    logger.LogInformation("Processing customer file {FilePath} for import job {ImportJobId}", filePath, job.Id);
+                    await ProcessCustomerFile(csvStream, job, customers, errors, cancellationToken);
+                }
+                else
+                {
+                    logger.LogWarning("Skipping unrecognized file {FilePath} for import job {ImportJobId}", filePath, job.Id);
                 }
 
-                var customer = new Customer
-                {
-                    Id = Guid.NewGuid(),
-                    ImportId = job.Id,
-                    FirstName = row.FirstName?.Trim() ?? string.Empty,
-                    LastName = row.LastName?.Trim() ?? string.Empty,
-                    Email = row.Email?.Trim() ?? string.Empty,
-                    DateOfBirth = DateOnly.Parse(row.DateOfBirth!, CultureInfo.InvariantCulture),
-                    Country = row.Country?.Trim() ?? string.Empty,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
+                await Flush(customers, errors, cancellationToken);
 
-                customers.Add(customer);
-                job.SuccessfulRows++;
+                job.Status = ImportStatus.Completed;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+
+                await db.SaveChangesAsync(cancellationToken);
+
+                logger.LogInformation(
+                    "Completed import job {ImportJobId}: {ProcessedRows} processed, {SuccessfulRows} succeeded, {FailedRows} failed",
+                    job.Id, job.ProcessedRows, job.SuccessfulRows, job.FailedRows);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Import job {ImportJobId} was cancelled after processing {ProcessedRows} rows", job.Id, job.ProcessedRows);
+
+                job.Status = ImportStatus.Cancelled;
+                job.FailureReason = "Job processing was cancelled.";
+                job.CompletedAt = DateTimeOffset.UtcNow;
+
+                await db.SaveChangesAsync(CancellationToken.None);
+                await RemovePartialImportDataAsync(job.Id);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Import job {ImportJobId} failed after processing {ProcessedRows} rows", job.Id, job.ProcessedRows);
+
+                job.Status = ImportStatus.Failed;
+                job.FailureReason = ex.Message;
+                job.CompletedAt = DateTimeOffset.UtcNow;
+
+                await db.SaveChangesAsync(CancellationToken.None);
+                await RemovePartialImportDataAsync(job.Id);
+            }
+        }
+    }
+
+    private async Task ProcessCustomerFile(Stream csvStream, ImportJob job, List<Customer> customers, List<ImportError> errors, CancellationToken cancellationToken)
+    {
+        await foreach (CustomerImportRow row in csvReader.ReadAsync(csvStream, cancellationToken))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            job.TotalRows++;
+
+            ValidationResult validationResult = await csvRowValidator.ValidateAsync(row, cancellationToken);
+
+            if (!validationResult.IsValid)
+            {
+                foreach (var validationError in validationResult.Errors)
+                {
+                    errors.Add(new ImportError
+                    {
+                        ImportJobId = job.Id,
+                        RowNumber = row.RowNumber,
+                        Field = validationError.PropertyName,
+                        ErrorCode = validationError.ErrorCode,
+                        ErrorMessage = validationError.ErrorMessage,
+                        RawValue = validationError.AttemptedValue?.ToString()
+                    });
+                }
+
+                job.FailedRows++;
                 job.ProcessedRows++;
 
                 await FlushIfNeeded(customers, errors, cancellationToken);
+                continue;
             }
 
-            await Flush(customers, errors, cancellationToken);
-
-            job.Status = ImportStatus.Completed;
-            job.CompletedAt = DateTimeOffset.UtcNow;
-
-            await db.SaveChangesAsync(cancellationToken);
-
-            logger.LogInformation(
-                "Completed import job {ImportJobId}: {ProcessedRows} processed, {SuccessfulRows} succeeded, {FailedRows} failed",
-                job.Id, job.ProcessedRows, job.SuccessfulRows, job.FailedRows);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            logger.LogWarning("Import job {ImportJobId} was cancelled after processing {ProcessedRows} rows", job.Id, job.ProcessedRows);
-
-            try
+            var customer = new Customer
             {
-                await Flush(customers, errors, CancellationToken.None);
-            }
-            catch (Exception flushEx)
-            {
-                logger.LogWarning(flushEx, "Failed to flush final batch while cancelling import job {ImportJobId}", job.Id);
-            }
+                Id = Guid.NewGuid(),
+                ImportId = job.Id,
+                FirstName = row.FirstName?.Trim() ?? string.Empty,
+                LastName = row.LastName?.Trim() ?? string.Empty,
+                Email = row.Email?.Trim() ?? string.Empty,
+                DateOfBirth = DateOnly.Parse(row.DateOfBirth!, CultureInfo.InvariantCulture),
+                Country = row.Country?.Trim() ?? string.Empty,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
 
-            job.Status = ImportStatus.Cancelled;
-            job.FailureReason = "Job processing was cancelled.";
-            job.CompletedAt = DateTimeOffset.UtcNow;
+            customers.Add(customer);
+            job.SuccessfulRows++;
+            job.ProcessedRows++;
 
-            await db.SaveChangesAsync(CancellationToken.None);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Import job {ImportJobId} failed after processing {ProcessedRows} rows", job.Id, job.ProcessedRows);
-
-            job.Status = ImportStatus.Failed;
-            job.FailureReason = ex.Message;
-            job.CompletedAt = DateTimeOffset.UtcNow;
-
-            await db.SaveChangesAsync(CancellationToken.None);
+            await FlushIfNeeded(customers, errors, cancellationToken);
         }
     }
 
@@ -159,6 +173,7 @@ internal class ImportJobProcessor(
         try
         {
             await db.SaveChangesAsync(cancellationToken);
+            logger.LogDebug("Flushed batch of {CustomerCount} customers and {ErrorCount} errors", customers.Count, errors.Count);
         }
         catch (Exception ex)
         {
@@ -181,8 +196,14 @@ internal class ImportJobProcessor(
             customers.Clear();
             errors.Clear();
         }
+    }
 
-        logger.LogDebug("Flushed batch of {CustomerCount} customers and {ErrorCount} errors", customers.Count, errors.Count);
+    private async Task RemovePartialImportDataAsync(Guid jobId)
+    {
+        logger.LogError("Removing partial import data for job {JobId} because of an error.", jobId);
+        using var cleanupCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await db.Customers.Where(c => c.ImportId == jobId).ExecuteDeleteAsync(cleanupCts.Token);
+        await db.ImportErrors.Where(c => c.ImportJobId == jobId).ExecuteDeleteAsync(cleanupCts.Token);
     }
 }
 

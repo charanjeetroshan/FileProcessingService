@@ -1,7 +1,10 @@
 using FileProcessingService.Application.Configuration;
 using FileProcessingService.Application.Imports;
+using FileProcessingService.Application.Imports.Abstractions;
 using FileProcessingService.Domain.Entities;
 using FileProcessingService.Domain.Enums;
+using FileProcessingService.Domain.Constants;
+using FileProcessingService.Infrastructure.FileStorage;
 using FileProcessingService.Infrastructure.Imports;
 using FileProcessingService.Infrastructure.Persistence;
 using FluentValidation;
@@ -48,18 +51,21 @@ public class ImportJobProcessorTests
     private ImportJobProcessor CreateProcessor()
     {
         var options = Options.Create(new FileStorageOptions { UploadDirectoryPath = uploadDirectory });
-        return new ImportJobProcessor(options, csvReaderMock, validatorMock, dbContext, NullLogger<ImportJobProcessor>.Instance);
+        var storage = new LocalFileStorageService(NullLogger<LocalFileStorageService>.Instance);
+        return new ImportJobProcessor(options, storage, csvReaderMock, validatorMock, dbContext, NullLogger<ImportJobProcessor>.Instance);
     }
 
-    private ImportJob CreateAndPersistJob()
+    private ImportJob CreateAndPersistJob(string fileName = FileSystemConstants.CustomerFileName)
     {
         var job = new ImportJob
         {
-            OriginalFileName = "customers.csv",
-            StoredFileName = $"{Guid.NewGuid()}_customers.csv",
+            UploadedFileName = "package.zip",
+            DataPackageGuid = Guid.NewGuid().ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         };
-        File.WriteAllText(Path.Combine(uploadDirectory, job.StoredFileName), string.Empty);
+        var dataDirectory = Path.Combine(uploadDirectory, job.DataPackageGuid, FileSystemConstants.DataDirectoryName);
+        Directory.CreateDirectory(dataDirectory);
+        File.WriteAllText(Path.Combine(dataDirectory, fileName), string.Empty);
 
         dbContext.ImportJobs.Add(job);
         dbContext.SaveChanges();
@@ -75,10 +81,11 @@ public class ImportJobProcessorTests
         await Task.CompletedTask;
     }
 
-    [Test]
-    public async Task ProcessJob_WithAllValidRows_CompletesSuccessfullyAndPersistsCustomers()
+    [TestCase("customers.csv")]
+    [TestCase("CUSTOMERS.CSV")]
+    public async Task ProcessJob_WithAllValidRows_CompletesSuccessfullyAndPersistsCustomers(string fileName)
     {
-        var job = CreateAndPersistJob();
+        var job = CreateAndPersistJob(fileName);
         var rows = new[]
         {
             new CustomerImportRow { RowNumber = 2, FirstName = "Jane", LastName = "Doe", Email = "jane@example.com", DateOfBirth = "1990-01-01", Country = "US" }
@@ -97,6 +104,9 @@ public class ImportJobProcessorTests
         Assert.That(job.SuccessfulRows, Is.EqualTo(1));
         Assert.That(job.FailedRows, Is.EqualTo(0));
         Assert.That(dbContext.Customers.Count(), Is.EqualTo(1));
+        Assert.That(dbContext.Customers.Single().ImportId, Is.EqualTo(job.Id));
+        Assert.That(job.ProcessedRows, Is.EqualTo(1));
+        Assert.That(job.CompletedAt, Is.Not.Null);
     }
 
     [Test]
@@ -125,7 +135,7 @@ public class ImportJobProcessorTests
     }
 
     [Test]
-    public async Task ProcessJob_WhenCancelledDuringProcessing_MarksJobCancelledAndThrows()
+    public void ProcessJob_WhenCancelledDuringProcessing_MarksJobCancelledAndThrows()
     {
         var job = CreateAndPersistJob();
         using var cts = new CancellationTokenSource();
@@ -138,7 +148,7 @@ public class ImportJobProcessorTests
         csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
             .Returns(ToAsyncEnumerable(rows));
         validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>())
-            .Returns(async _ =>
+            .Returns(_ =>
             {
                 cts.Cancel();
                 cts.Token.ThrowIfCancellationRequested();
@@ -175,11 +185,67 @@ public class ImportJobProcessorTests
         var job = CreateAndPersistJob();
 
         csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
-            .Returns(ToAsyncEnumerable([]));
+            .Returns(_ =>
+            {
+                Assert.That(job.Status, Is.EqualTo(ImportStatus.Processing));
+                Assert.That(job.StartedAt, Is.Not.Null);
+                return ToAsyncEnumerable([]);
+            });
 
         var processor = CreateProcessor();
         await processor.ProcessJob(job, CancellationToken.None);
 
         Assert.That(job.StartedAt, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task ProcessJob_WithExtraFiles_ReadsOnlyExtractedCustomers()
+    {
+        var job = CreateAndPersistJob();
+        var packageDirectory = Path.Combine(uploadDirectory, job.DataPackageGuid);
+        var dataDirectory = Path.Combine(packageDirectory, FileSystemConstants.DataDirectoryName);
+        File.WriteAllText(Path.Combine(dataDirectory, "orders.csv"), "ignored");
+        var archiveDirectory = Path.Combine(packageDirectory, FileSystemConstants.ArchiveDirectoryName);
+        Directory.CreateDirectory(archiveDirectory);
+        File.WriteAllText(Path.Combine(archiveDirectory, "customers.csv"), "not extracted data");
+        string? readPath = null;
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            readPath = ((FileStream)call.Arg<Stream>()).Name;
+            return ToAsyncEnumerable([]);
+        });
+
+        await CreateProcessor().ProcessJob(job, CancellationToken.None);
+
+        Assert.That(readPath, Is.EqualTo(Path.Combine(dataDirectory, FileSystemConstants.CustomerFileName)));
+        csvReaderMock.Received(1).ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>());
+        Assert.That(job.Status, Is.EqualTo(ImportStatus.Completed));
+        Assert.That(job.TotalRows, Is.Zero);
+    }
+
+    [TestCase(1000)]
+    [TestCase(1001)]
+    public async Task ProcessJob_WithBatchOfCustomers_PersistsEveryRow(int rowCount)
+    {
+        var job = CreateAndPersistJob();
+        var rows = Enumerable.Range(1, rowCount).Select(i => new CustomerImportRow
+        {
+            RowNumber = i + 1,
+            FirstName = " Jane ",
+            LastName = " Doe ",
+            Email = $"customer{i}@example.com",
+            DateOfBirth = "1990-01-01",
+            Country = " US "
+        });
+        csvReaderMock.ReadAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>()).Returns(ToAsyncEnumerable(rows));
+        validatorMock.ValidateAsync(Arg.Any<CustomerImportRow>(), Arg.Any<CancellationToken>()).Returns(new ValidationResult());
+
+        await CreateProcessor().ProcessJob(job, CancellationToken.None);
+
+        Assert.That(job.Status, Is.EqualTo(ImportStatus.Completed));
+        Assert.That(job.ProcessedRows, Is.EqualTo(rowCount));
+        Assert.That(job.SuccessfulRows, Is.EqualTo(rowCount));
+        Assert.That(dbContext.Customers.Count(), Is.EqualTo(rowCount));
+        Assert.That(dbContext.Customers.All(c => c.FirstName == "Jane" && c.LastName == "Doe" && c.Country == "US"), Is.True);
     }
 }

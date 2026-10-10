@@ -1,24 +1,41 @@
 using FileProcessingService.Application.Configuration;
+using FileProcessingService.Application.Contracts;
 using FileProcessingService.Application.Customers;
+using FileProcessingService.Application.Imports.Abstractions;
+using FileProcessingService.Domain.Entities;
+using FileProcessingService.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FileProcessingService.Application.Exports;
 
 public class CustomerExportService(
+    IImportJobRepository importJobRepository,
     ICustomerRepository customerRepository,
     IEnumerable<IExporter> exporters,
     IOptions<FileStorageOptions> options,
     ILogger<CustomerExportService> logger) : ICustomerExportService
 {
-    public async Task<CustomerExportOutcome?> ExportByImportIdAsync(Guid importId, EExportFormat format, CancellationToken cancellationToken = default)
+    public async Task<CustomerExportOutcome> ExportByImportIdAsync(Guid importId, EExportFormat format, CancellationToken cancellationToken = default)
     {
+        var importJob = await importJobRepository.GetByIdAsync(importId, cancellationToken);
+
+        if (importJob is null)
+        {
+            return new CustomerExportOutcome.JobNotFound();
+        }
+
+        if (importJob.Status != ImportStatus.Completed)
+        {
+            return new CustomerExportOutcome.JobNotCompleted(importJob.ToExportResponse());
+        }
+
         var customers = customerRepository.GetByImportIdAsync(importId, cancellationToken);
 
         await using var enumerator = customers.GetAsyncEnumerator(cancellationToken);
         if (!await enumerator.MoveNextAsync())
         {
-            return null;
+            return new CustomerExportOutcome.NoCustomers(importJob.ToExportResponse());
         }
 
         var exporter = exporters.SingleOrDefault(e => e.Format == format)
@@ -33,10 +50,10 @@ public class CustomerExportService(
         logger.LogInformation("Export created for Import Id: {ImportId} at {FilePath}." + Environment.NewLine +
             "Row count: {RowCount}.", importId, exportResult.ExportedFilePath, exportResult.ExportedDataSetCount);
 
-        return new CustomerExportOutcome(exportResult, GetContentType(format));
+        return new CustomerExportOutcome.Exported(exportResult, GetContentType(format));
     }
 
-    private static async IAsyncEnumerable<Domain.Entities.Customer> Prepend(IAsyncEnumerator<Domain.Entities.Customer> enumerator)
+    private static async IAsyncEnumerable<Customer> Prepend(IAsyncEnumerator<Customer> enumerator)
     {
         yield return enumerator.Current;
 

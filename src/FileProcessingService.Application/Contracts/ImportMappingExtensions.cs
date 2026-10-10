@@ -25,6 +25,20 @@ public static class ImportMappingExtensions
         };
     }
 
+    public static ImportJobExportResponse ToExportResponse(this ImportJob job)
+    {
+        return new ImportJobExportResponse
+        {
+            Id = job.Id,
+            DataPackageGuid = job.DataPackageGuid,
+            Status = job.Status.ToString(),
+            PercentageComplete = job.TotalRows == 0 ? 0 : Math.Round(job.ProcessedRows / (double)job.TotalRows * 100, 2),
+            CreatedAt = job.CreatedAt,
+            ProcessingDuration = job.StartedAt is null || job.CompletedAt is null ? null : job.CompletedAt - job.StartedAt,
+            FailureReason = job.FailureReason
+        };
+    }
+
     public static ImportErrorResponse ToResponse(this ImportError error) => new()
     {
         Id = error.Id,

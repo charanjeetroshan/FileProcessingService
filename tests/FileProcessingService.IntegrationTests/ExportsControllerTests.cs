@@ -1,4 +1,5 @@
 using FileProcessingService.Domain.Entities;
+using FileProcessingService.Domain.Enums;
 using FileProcessingService.Infrastructure.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net;
@@ -26,12 +27,25 @@ public class ExportsControllerTests
         factory.Dispose();
     }
 
-    private async Task<Guid> SeedCustomersAsync(params Customer[] customers)
+    private Task<Guid> SeedCustomersAsync(params Customer[] customers) =>
+        SeedCustomersAsync(ImportStatus.Completed, customers);
+
+    private async Task<Guid> SeedCustomersAsync(ImportStatus status, params Customer[] customers)
     {
         var importId = Guid.NewGuid();
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<FileProcessingDbContext>();
+
+        dbContext.ImportJobs.Add(new ImportJob
+        {
+            Id = importId,
+            DataPackageGuid = Guid.NewGuid().ToString(),
+            CompositeHash = Guid.NewGuid().ToString(),
+            UploadedFileName = "test.csv",
+            Status = status,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
 
         foreach (var customer in customers)
         {
@@ -70,14 +84,31 @@ public class ExportsControllerTests
     }
 
     [Test]
-    public async Task ExportByImportId_WithNoCustomers_ReturnsNotFound()
+    public async Task ExportByImportId_WithUnknownJob_ReturnsNotFound()
     {
         var response = await client.GetAsync($"/api/exports/{Guid.NewGuid()}?format=NdJson");
 
-        var body = await response.Content.ReadAsStringAsync();
-        TestContext.Progress.WriteLine(body);
-
         Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NotFound));
+    }
+
+    [Test]
+    public async Task ExportByImportId_WithNoCustomers_ReturnsNoContent()
+    {
+        var importId = await SeedCustomersAsync();
+
+        var response = await client.GetAsync($"/api/exports/{importId}?format=NdJson");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+    }
+
+    [Test]
+    public async Task ExportByImportId_WithJobNotCompleted_ReturnsBadRequest()
+    {
+        var importId = await SeedCustomersAsync(ImportStatus.Pending, BuildCustomer("jane.doe@example.com"));
+
+        var response = await client.GetAsync($"/api/exports/{importId}?format=NdJson");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
     }
 
     [Test]

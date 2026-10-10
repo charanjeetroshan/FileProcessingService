@@ -9,8 +9,9 @@ public class ExportsController(ICustomerExportService customerExportService) : C
 {
     [HttpGet("{importId:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ExportByImportId(
         Guid importId,
         [FromQuery] EExportFormat format,
@@ -18,11 +19,30 @@ public class ExportsController(ICustomerExportService customerExportService) : C
     {
         var outcome = await customerExportService.ExportByImportIdAsync(importId, format, cancellationToken);
 
-        if (outcome is null)
+        return outcome switch
         {
-            return NotFound();
+            CustomerExportOutcome.Exported exported => PhysicalFile(exported.Result.ExportedFilePath, exported.ContentType, Path.GetFileName(exported.Result.ExportedFilePath)),
+            CustomerExportOutcome.NoCustomers => NoContent(),
+            CustomerExportOutcome.JobNotFound => NotFound(CreateProblem(StatusCodes.Status404NotFound, "Import job not found.")),
+            CustomerExportOutcome.JobNotCompleted notCompleted => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "Invalid job status, no export possible.", notCompleted.Job)),
+            _ => throw new InvalidOperationException($"Unhandled export outcome: {outcome.GetType().Name}")
+        };
+    }
+
+    private static ProblemDetails CreateProblem(int status, string detail, object? job = null)
+    {
+        var problem = new ProblemDetails
+        {
+            Title = "Error occurred",
+            Detail = detail,
+            Status = status
+        };
+
+        if (job is not null)
+        {
+            problem.Extensions["job"] = job;
         }
 
-        return PhysicalFile(outcome.Result.ExportedFilePath, outcome.ContentType, Path.GetFileName(outcome.Result.ExportedFilePath));
+        return problem;
     }
 }
